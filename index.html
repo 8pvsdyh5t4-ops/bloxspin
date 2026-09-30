@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>BloxSpin</title>
+
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      background:
+        radial-gradient(circle at top, #34215d 0%, #15101f 35%, #09070d 100%);
+      color: white;
+      min-height: 100vh;
+      overflow-x: hidden;
+      user-select: none;
+    }
+
+    .app {
+      max-width: 480px;
+      margin: 0 auto;
+      min-height: 100vh;
+      padding-bottom: 95px;
+    }
+
+    .top {
+      padding: 20px 18px 10px;
+    }
+
+    .logo {
+      font-size: 30px;
+      font-weight: 900;
+      letter-spacing: 1px;
+    }
+
+    .logo span {
+      color: #ffca3a;
+    }
+
+    .subtitle {
+      color: #aaa2b8;
+      font-size: 13px;
+      margin-top: 5px;
+    }
+
+    .user-box {
+      margin: 15px 18px;
+      padding: 15px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.06);
+      border-radius: 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .user-left {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+    }
+
+    .avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      font-size: 25px;
+      background: linear-gradient(135deg, #7f5af0, #e14eca);
+    }
+
+    .username {
+      font-weight: 800;
+      font-size: 16px;
+    }
+
+    .level {
+      font-size: 12px;
+      color: #aaa2b8;
+      margin-top: 4px;
+    }
+
+    .balance {
+      text-align: right;
+    }
+
+    .balance-title {
+      font-size: 11px;
+      color: #aaa2b8;
+    }
+
+    .balance-value {
+      color: #ffca3a;
+      font-weight: 900;
+      font-size: 18px;
+      margin-top: 4px;
+    }
+
+    .daily {
+      margin: 0 18px 18px;
+      background: linear-gradient(135deg, rgba(255,202,58,0.18), rgba(255,120,0,0.08));
+      border: 1px solid rgba(255,202,58,0.25);
+      padding: 14px;
+      border-radius: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .daily-info h3 {
+      font-size: 15px;
+      margin-bottom: 4px;
+    }
+
+    .daily-info p {
+      font-size: 12px;
+      color: #bbb2c7;
+    }
+
+    .daily-btn {
+      border: none;
+      border-radius: 12px;
+      background: #ffca3a;
+      color: #241c07;
+      font-weight: 900;
+      padding: 12px 14px;
+      cursor: pointer;
+      min-width: 100px;
+    }
+
+    .daily-btn:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+
+    .slot-card {
+      margin: 0 18px;
+      padding: 20px;
+      border-radius: 25px;
+      border: 1px solid rgba(255,255,255,0.09);
+      background: rgba(22, 15, 31, 0.92);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+    }
+
+    .slot-title {
+      text-align: center;
+      font-weight: 900;
+      font-size: 22px;
+    }
+
+    .slot-subtitle {
+      text-align: center;
+      color: #9f97ac;
+      font-size: 12px;
+      margin: 6px 0 20px;
+    }
+
+    .reels {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .reel {
+      height: 105px;
+      background: #f7f4fb;
+      border-radius: 18px;
+      display: grid;
+      place-items: center;
+      color: black;
+      font-size: 50px;
+      border: 4px solid #312840;
+      box-shadow: inset 0 0 20px rgba(0,0,0,0.12);
+    }
+
+    .spin-animation {
+      animation: pulse .13s linear infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: translateY(-4px); }
+      50% { transform: translateY(4px); }
+      100% { transform: translateY(-4px); }
+    }
+
+    .result {
+      min-height: 45px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      font-weight: 800;
+      margin-top: 10px;
+      color: #d7d0e0;
+    }
+
+    .win {
+      color: #52e3a4;
+    }
+
+    .lose {
+      color: #ff6b81;
+    }
+
+    .bet-info {
+      display: flex;
+      justify-content: space-between;
+      margin: 10px 2px 13px;
+      color: #aaa2b8;
+      font-size: 13px;
+    }
+
+    .spin-btn {
+      width: 100%;
+      height: 58px;
+      border: none;
+      border-radius: 16px;
+      cursor: pointer;
+      font-size: 19px;
+      font-weight: 900;
+      color: white;
+      background: linear-gradient(135deg, #7f5af0, #d946ef);
+      box-shadow: 0 9px 25px rgba(127,90,240,0.28);
+    }
+
+    .spin-btn:active {
+      transform: scale(0.98);
+    }
+
+    .spin-btn:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
+    .section-title {
+      font-size: 17px;
+      font-weight: 800;
+      margin: 24px 18px 12px;
+    }
+
+    .collection {
+      margin: 0 18px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .item {
+      min-height: 95px;
+      padding: 12px 8px;
+      text-align: center;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.07);
+    }
+
+    .item-icon {
+      font-size: 32px;
+    }
+
+    .item-name {
+      font-size: 11px;
+      margin-top: 8px;
+      color: #cec7d6;
+    }
+
+    .empty {
+      opacity: 0.35;
+    }
+
+    .nav {
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 480px;
+      width: 100%;
+      height: 78px;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      background: rgba(12,9,17,0.96);
+      border-top: 1px solid rgba(255,255,255,0.08);
+      backdrop-filter: blur(16px);
+    }
+
+    .nav-item {
+      border: none;
+      color: #756e80;
+      background: transparent;
+      font-size: 10px;
+      cursor: pointer;
+    }
+
+    .nav-item div:first-child {
+      font-size: 23px;
+      margin-bottom: 4px;
+    }
+
+    .nav-item.active {
+      color: #c0a8ff;
+    }
+
+    .toast {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translate(-50%, -100px);
+      background: #24202b;
+      padding: 12px 18px;
+      border-radius: 14px;
+      font-weight: 800;
+      transition: 0.3s;
+      z-index: 999;
+      border: 1px solid rgba(255,255,255,.1);
+      text-align: center;
+      max-width: 90%;
+    }
+
+    .toast.show {
+      transform: translate(-50%, 0);
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="toast" id="toast"></div>
+
+<div class="app">
+
+  <div class="top">
+    <div class="logo">Blox<span>Spin</span> 🎰</div>
+    <div class="subtitle">Collect. Spin. Upgrade.</div>
+  </div>
+
+  <div class="user-box">
+    <div class="user-left">
+      <div class="avatar">🧱</div>
+
+      <div>
+        <div class="username" id="username">Player</div>
+        <div class="level">⭐ Level <span id="level">1</span></div>
+      </div>
+    </div>
+
+    <div class="balance">
+      <div class="balance-title">BLOX COINS</div>
+      <div class="balance-value">
+        🪙 <span id="balance">5000</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="daily">
+    <div class="daily-info">
+      <h3>🎁 Daily Reward</h3>
+      <p>Забери ежедневные монеты</p>
+    </div>
+
+    <button class="daily-btn" id="dailyBtn">
+      +1000
+    </button>
+  </div>
+
+  <div class="slot-card">
+
+    <div class="slot-title">BLOX SLOT</div>
+    <div class="slot-subtitle">
+      Собери три одинаковых символа
+    </div>
+
+    <div class="reels">
+      <div class="reel" id="reel1">🍒</div>
+      <div class="reel" id="reel2">💎</div>
+      <div class="reel" id="reel3">👑</div>
+    </div>
+
+    <div class="result" id="result">
+      Готов к вращению
+    </div>
+
+    <div class="bet-info">
+      <span>Ставка</span>
+      <strong>🪙 100</strong>
+    </div>
+
+    <button class="spin-btn" id="spinBtn">
+      🎰 SPIN
+    </button>
+
+  </div>
+
+  <div class="section-title">
+    💎 Твоя коллекция
+  </div>
+
+  <div class="collection">
+
+    <div class="item">
+      <div class="item-icon">🧱</div>
+      <div class="item-name">Blox Block</div>
+    </div>
+
+    <div class="item">
+      <div class="item-icon">⚔️</div>
+      <div class="item-name">Neon Sword</div>
+    </div>
+
+    <div class="item empty">
+      <div class="item-icon">❓</div>
+      <div class="item-name">Не найдено</div>
+    </div>
+
+  </div>
+
+</div>
+
+<div class="nav">
+
+  <button class="nav-item active">
+    <div>🏠</div>
+    Главная
+  </button>
+
+  <button class="nav-item">
+    <div>🎰</div>
+    Играть
+  </button>
+
+  <button class="nav-item">
+    <div>🎒</div>
+    Предметы
+  </button>
+
+  <button class="nav-item">
+    <div>🏆</div>
+    Топ
+  </button>
+
+  <button class="nav-item">
+    <div>👤</div>
+    Профиль
+  </button>
+
+</div>
+
+<script>
+
+const tg = window.Telegram?.WebApp;
+
+if (tg) {
+  tg.ready();
+  tg.expand();
+}
+
+const symbols = [
+  "🍒",
+  "🍋",
+  "🍇",
+  "⭐",
+  "💎",
+  "👑"
+];
+
+const BET = 100;
+
+let balance = Number(localStorage.getItem("bloxBalance"));
+
+if (!balance && balance !== 0) {
+  balance = 5000;
+}
+
+let level = Number(localStorage.getItem("bloxLevel")) || 1;
+
+const balanceEl = document.getElementById("balance");
+const levelEl = document.getElementById("level");
+
+const reel1 = document.getElementById("reel1");
+const reel2 = document.getElementById("reel2");
+const reel3 = document.getElementById("reel3");
+
+const spinBtn = document.getElementById("spinBtn");
+
+const resultEl = document.getElementById("result");
+
+const dailyBtn = document.getElementById("dailyBtn");
+
+const toast = document.getElementById("toast");
+
+function saveGame() {
+
+  localStorage.setItem(
+    "bloxBalance",
+    balance
+  );
+
+  localStorage.setItem(
+    "bloxLevel",
+    level
+  );
+
+}
+
+function updateUI() {
+
+  balanceEl.textContent =
+    balance.toLocaleString("ru-RU");
+
+  levelEl.textContent = level;
+
+}
+
+function showToast(message) {
+
+  toast.textContent = message;
+
+  toast.classList.add("show");
+
+  setTimeout(() => {
+
+    toast.classList.remove("show");
+
+  }, 2200);
+
+}
+
+function randomSymbol() {
+
+  return symbols[
+    Math.floor(
+      Math.random() * symbols.length
+    )
+  ];
+
+}
+
+function getPrize(a,b,c) {
+
+  if (
+    a === "👑" &&
+    b === "👑" &&
+    c === "👑"
+  ) {
+
+    return 10000;
+
+  }
+
+  if (
+    a === "💎" &&
+    b === "💎" &&
+    c === "💎"
+  ) {
+
+    return 5000;
+
+  }
+
+  if (
+    a === b &&
+    b === c
+  ) {
+
+    return 1500;
+
+  }
+
+  if (
+    a === b ||
+    b === c ||
+    a === c
+  ) {
+
+    return 150;
+
+  }
+
+  return 0;
+
+}
+
+async function spin() {
+
+  if (balance < BET) {
+
+    showToast(
+      "Недостаточно Blox Coins 🪙"
+    );
+
+    return;
+
+  }
+
+  spinBtn.disabled = true;
+
+  balance -= BET;
+
+  updateUI();
+
+  resultEl.className = "result";
+
+  resultEl.textContent =
+    "Крутим... 🎰";
+
+  reel1.classList.add(
+    "spin-animation"
+  );
+
+  reel2.classList.add(
+    "spin-animation"
+  );
+
+  reel3.classList.add(
+    "spin-animation"
+  );
+
+  let counter = 0;
+
+  const animation =
+    setInterval(() => {
+
+      reel1.textContent =
+        randomSymbol();
+
+      reel2.textContent =
+        randomSymbol();
+
+      reel3.textContent =
+        randomSymbol();
+
+      counter++;
+
+      if (counter >= 14) {
+
+        clearInterval(animation);
+
+        finishSpin();
+
+      }
+
+    }, 80);
+
+}
+
+function finishSpin() {
+
+  const a =
+    randomSymbol();
+
+  const b =
+    randomSymbol();
+
+  const c =
+    randomSymbol();
+
+  reel1.textContent = a;
+
+  reel2.textContent = b;
+
+  reel3.textContent = c;
+
+  reel1.classList.remove(
+    "spin-animation"
+  );
+
+  reel2.classList.remove(
+    "spin-animation"
+  );
+
+  reel3.classList.remove(
+    "spin-animation"
+  );
+
+  const prize =
+    getPrize(a,b,c);
+
+  if (prize > 0) {
+
+    balance += prize;
+
+    resultEl.className =
+      "result win";
+
+    resultEl.textContent =
+      `🔥 Победа! +${prize} Coins`;
+
+    if (tg?.HapticFeedback) {
+
+      tg.HapticFeedback
+        .notificationOccurred(
+          "success"
+        );
+
+    }
+
+  } else {
+
+    resultEl.className =
+      "result lose";
+
+    resultEl.textContent =
+      "Ничего не выпало 😈";
+
+  }
+
+  level =
+    Math.max(
+      1,
+      Math.floor(
+        balance / 10000
+      ) + 1
+    );
+
+  saveGame();
+
+  updateUI();
+
+  spinBtn.disabled = false;
+
+}
+
+spinBtn.addEventListener(
+  "click",
+  spin
+);
+
+
+// Telegram username
+
+const tgUser =
+  tg?.initDataUnsafe?.user;
+
+if (tgUser) {
+
+  document.getElementById(
+    "username"
+  ).textContent =
+    tgUser.first_name ||
+    tgUser.username ||
+    "Player";
+
+}
+
+
+// DAILY REWARD
+
+const today =
+  new Date()
+    .toISOString()
+    .split("T")[0];
+
+const lastDaily =
+  localStorage.getItem(
+    "bloxDaily"
+  );
+
+function updateDaily() {
+
+  if (lastDaily === today) {
+
+    dailyBtn.disabled = true;
+
+    dailyBtn.textContent =
+      "Получено ✓";
+
+  }
+
+}
+
+dailyBtn.addEventListener(
+  "click",
+  () => {
+
+    const saved =
+      localStorage.getItem(
+        "bloxDaily"
+      );
+
+    if (saved === today) {
+
+      return;
+
+    }
+
+    balance += 1000;
+
+    localStorage.setItem(
+      "bloxDaily",
+      today
+    );
+
+    saveGame();
+
+    updateUI();
+
+    dailyBtn.disabled = true;
+
+    dailyBtn.textContent =
+      "Получено ✓";
+
+    showToast(
+      "🎁 +1000 Blox Coins!"
+    );
+
+    if (tg?.HapticFeedback) {
+
+      tg.HapticFeedback
+        .notificationOccurred(
+          "success"
+        );
+
+    }
+
+  }
+);
+
+updateDaily();
+
+updateUI();
+
+
+// Navigation animation
+
+document
+.querySelectorAll(".nav-item")
+.forEach(button => {
+
+  button.addEventListener(
+    "click",
+    () => {
+
+      document
+      .querySelectorAll(
+        ".nav-item"
+      )
+      .forEach(item =>
+        item.classList.remove(
+          "active"
+        )
+      );
+
+      button.classList.add(
+        "active"
+      );
+
+    }
+  );
+
+});
+
+</script>
+
+</body>
+</html>
