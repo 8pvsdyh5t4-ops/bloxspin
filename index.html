@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
   <meta name="theme-color" content="#0b0712">
-  <title>BloxSpin v2.1</title>
+  <title>BloxSpin v2.2</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -41,15 +41,15 @@
     const symbols=['🧱','⚔️','🐲','💎','👑','🌌'];
     const rarity={Common:'#b6b0bd',Rare:'#55a7ff',Epic:'#b86cff',Mythic:'#ff5bc8',Legendary:'#ffc845',Secret:'#55f5df'};
     const items=[{id:'block',name:'Blox Block',icon:'🧱',rarity:'Common',w:38},{id:'sword',name:'Neon Sword',icon:'⚔️',rarity:'Rare',w:25},{id:'pet',name:'Dragon Pet',icon:'🐲',rarity:'Epic',w:16},{id:'crystal',name:'Void Crystal',icon:'💎',rarity:'Mythic',w:10},{id:'crown',name:'Golden Crown',icon:'👑',rarity:'Legendary',w:7},{id:'secret',name:'Secret Galaxy',icon:'🌌',rarity:'Secret',w:4}];
-    const defaults={balance:5000,level:1,xp:0,spins:0,wins:0,inventory:{},daily:'',missionsClaimed:{}};
+    const defaults={balance:5000,level:1,xp:0,spins:0,wins:0,inventory:{},daily:'',missionsClaimed:{},updatedAt:0};
     function loadGame(){try{const saved=localStorage.getItem(KEY);if(saved)return{...defaults,...JSON.parse(saved)};const oldBalance=localStorage.getItem('bloxBalance'),oldLevel=localStorage.getItem('bloxLevel');return{...defaults,balance:oldBalance===null?defaults.balance:Number(oldBalance),level:oldLevel===null?defaults.level:Number(oldLevel)}}catch{return{...defaults}}}
-    let game=loadGame();game.inventory=game.inventory||{};game.missionsClaimed=game.missionsClaimed||{};
+    function normalizeGame(value){return{...defaults,...value,inventory:value?.inventory||{},missionsClaimed:value?.missionsClaimed||{}}}let game=normalizeGame(loadGame());
     const user=tg?.initDataUnsafe?.user||{};const playerName=user.first_name||user.username||'Player';
     const missions=[{id:'spins3',icon:'🎰',name:'Сделай 3 вращения',target:3,reward:300,value:()=>game.spins},{id:'win1',icon:'🔥',name:'Получи одну победу',target:1,reward:500,value:()=>game.wins},{id:'item1',icon:'💎',name:'Найди предмет',target:1,reward:700,value:()=>totalItems()}];
-    function save(){localStorage.setItem(KEY,JSON.stringify(game))}function totalItems(){return Object.values(game.inventory).reduce((a,b)=>a+b,0)}function esc(value){return String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+    function save(){game.updatedAt=Date.now();const data=JSON.stringify(game);localStorage.setItem(KEY,data);try{tg?.CloudStorage?.setItem(KEY,data,()=>{})}catch{}}function totalItems(){return Object.values(game.inventory).reduce((a,b)=>a+b,0)}function esc(value){return String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
     function levelUp(){let need=game.level*100;while(game.xp>=need){game.xp-=need;game.level++;need=game.level*100;toast('⭐ Новый уровень: '+game.level)}}
     function bestItem(){for(const r of ['Secret','Legendary','Mythic','Epic','Rare','Common']){const it=items.find(x=>x.rarity===r&&game.inventory[x.id]);if(it)return it.name}return '—'}
-    function render(){const need=game.level*100;$('playerName').textContent=playerName;$('profileName').textContent=playerName;$('level').textContent=game.level;$('balance').textContent=game.balance.toLocaleString('ru-RU');$('xp').textContent=game.xp;$('xpNeed').textContent=need;$('xpBar').style.width=Math.min(100,game.xp/need*100)+'%';$('homeSpins').textContent=game.spins;$('homeWins').textContent=game.wins;$('homeItems').textContent=totalItems();$('profileLevel').textContent=game.level;$('profileBalance').textContent=game.balance.toLocaleString('ru-RU');$('profileSpins').textContent=game.spins;$('profileWins').textContent=game.wins;$('profileItems').textContent=totalItems();$('profileBest').textContent=bestItem();$('profileId').textContent=user.id?'Telegram ID: '+user.id:'Telegram player';$('leaderboard').innerHTML=leaders();renderInventory(activeFilter);renderMissions();updateDaily();save()}
+    function render(shouldSave=true){const need=game.level*100;$('playerName').textContent=playerName;$('profileName').textContent=playerName;$('level').textContent=game.level;$('balance').textContent=game.balance.toLocaleString('ru-RU');$('xp').textContent=game.xp;$('xpNeed').textContent=need;$('xpBar').style.width=Math.min(100,game.xp/need*100)+'%';$('homeSpins').textContent=game.spins;$('homeWins').textContent=game.wins;$('homeItems').textContent=totalItems();$('profileLevel').textContent=game.level;$('profileBalance').textContent=game.balance.toLocaleString('ru-RU');$('profileSpins').textContent=game.spins;$('profileWins').textContent=game.wins;$('profileItems').textContent=totalItems();$('profileBest').textContent=bestItem();$('profileId').textContent=user.id?'Telegram ID: '+user.id:'Telegram player';$('leaderboard').innerHTML=leaders();renderInventory(activeFilter);renderMissions();updateDaily();if(shouldSave)save()}
     function avatar(){if(user.photo_url){for(const id of['avatar','bigAvatar']){const img=document.createElement('img');img.src=user.photo_url;img.alt='';$(id).replaceChildren(img)}}}avatar();
     function toast(msg){$('toast').textContent=msg;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),2200)}
     function showPage(name){document.querySelectorAll('.page').forEach(x=>x.classList.toggle('active',x.id==='page-'+name));document.querySelectorAll('.nav button').forEach(x=>x.classList.toggle('active',x.dataset.page===name));scrollTo({top:0,behavior:'smooth'})}
@@ -64,7 +64,8 @@
     $('modalClose').onclick=()=>{$('dropModal').classList.remove('show');render()};
     $('spinBtn').onclick=()=>{if(game.balance<BET){toast('Недостаточно Blox Coins 🪙');return}const btn=$('spinBtn'),reels=[$('reel1'),$('reel2'),$('reel3')];btn.disabled=true;game.balance-=BET;game.spins++;game.xp+=20;$('result').className='result';$('result').textContent='Крутим... 🎰';reels.forEach(x=>x.classList.add('spinning'));render();let ticks=0;const timer=setInterval(()=>{reels.forEach(x=>x.textContent=randomSymbol());if(++ticks>=14){clearInterval(timer);const vals=reels.map(x=>x.textContent=randomSymbol()),win=prize(...vals);reels.forEach(x=>x.classList.remove('spinning'));if(win){game.balance+=win;game.wins++;game.xp+=25;$('result').className='result win';$('result').textContent='🔥 Победа! +'+win+' Coins';tg?.HapticFeedback?.notificationOccurred('success')}else{$('result').className='result lose';$('result').textContent='Ничего не выпало 😈'}levelUp();drop();btn.disabled=false;render()}},80)};
     function today(){const d=new Date(),p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())}function updateDaily(){const done=game.daily===today();$('dailyBtn').disabled=done;$('dailyBtn').textContent=done?'Получено ✓':'+1000'}$('dailyBtn').onclick=()=>{if(game.daily===today())return;game.daily=today();game.balance+=1000;game.xp+=10;levelUp();toast('🎁 +1000 Blox Coins!');tg?.HapticFeedback?.notificationOccurred('success');render()};
-    render();
+    function start(){render(false);if(!tg?.CloudStorage?.getItem){save();return}try{tg.CloudStorage.getItem(KEY,(error,value)=>{try{const remote=value?JSON.parse(value):null;if(!error&&remote&&(remote.updatedAt||0)>(game.updatedAt||0))game=normalizeGame(remote)}catch{}render()})}catch{save()}}
+    start();
   </script>
 </body>
 </html>
