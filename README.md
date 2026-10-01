@@ -13,7 +13,9 @@ Telegram Mini App with a Vercel API and Supabase database.
 
 ## Items and inventory
 
-Every item defines a category, rarity, combat bonuses and base Power. The inventory displays quantity, level, Power and equipped state, selects the strongest owned item automatically and supports category filters. Item upgrades currently have five levels, cost Coins and are saved in the player's existing server-side `upgrades` profile. The later ten-level material progression remains a separate roadmap stage.
+Every item defines a category, rarity, combat bonuses and base Power. The inventory displays quantity, level, Power and equipped state, selects the strongest owned item automatically and supports category filters. Item upgrades have ten levels, increasing Coin costs and duplicate-item material requirements from level 4. Levels and material consumption are saved in the player's server-side profile and inventory.
+
+The Play page uses the BloxSpin machine with block items instead of fruit symbols: armor, weapons, pets, crystals, crowns and mystery items. It exposes the supported 100, 250 and 500 Coin stakes and previews all six reward tiers; exact roadmap drop percentages remain a later stage.
 
 ## Setup
 

@@ -15,17 +15,35 @@ async function upgradeItem(user, payload) {
   const upgrades = player.upgrades && typeof player.upgrades === 'object' ? player.upgrades : {};
   const itemLevels = upgrades.itemLevels && typeof upgrades.itemLevels === 'object' ? upgrades.itemLevels : {};
   const level = Math.max(1, Number(itemLevels[itemId]) || 1);
-  if (level >= 5) throw new Error('Item is maxed');
+  if (level >= 10) throw new Error('Максимальный уровень предмета');
   const cost = itemUpgradeBase[itemId] * (level + 1);
   const balance = Number(player.balance) || 0;
-  if (balance < cost) throw new Error('Not enough coins');
+  const materialCost = level < 3 ? 0 : level < 6 ? 1 : level < 9 ? 2 : 3;
+  const inventoryCount = Number(inventory[0].count) || 0;
+  if (balance < cost) throw new Error('Недостаточно Blox Coins');
+  if (inventoryCount < materialCost + 1) throw new Error(`Нужно дубликатов: ${materialCost}`);
   const nextUpgrades = { ...upgrades, itemLevels: { ...itemLevels, [itemId]: level + 1 } };
+  if (materialCost) {
+    const materialUpdate = await supabase('inventory', {
+      method: 'PATCH',
+      query: `?player_id=eq.${uid}&item_id=eq.${encodeURIComponent(itemId)}&count=eq.${inventoryCount}`,
+      body: { count: inventoryCount - materialCost }
+    });
+    if (!materialUpdate?.length) throw new Error('Inventory changed, try again');
+  }
   const updated = await supabase('players', {
     method: 'PATCH',
     query: `?telegram_id=eq.${uid}&balance=eq.${balance}`,
     body: { balance: balance - cost, upgrades: nextUpgrades }
   });
-  if (!updated?.length) throw new Error('Profile changed, try again');
+  if (!updated?.length) {
+    if (materialCost) await supabase('inventory', {
+      method: 'PATCH',
+      query: `?player_id=eq.${uid}&item_id=eq.${encodeURIComponent(itemId)}&count=eq.${inventoryCount - materialCost}`,
+      body: { count: inventoryCount }
+    }).catch(() => {});
+    throw new Error('Profile changed, try again');
+  }
   return rpc('player_snapshot', { p_id: uid });
 }
 
