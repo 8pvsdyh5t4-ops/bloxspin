@@ -46,3 +46,13 @@ body.booting{overflow:hidden}
 button:focus-visible,summary:focus-visible{outline:2px solid #83ddff;outline-offset:3px}
 @media(max-width:370px){.is-home .header{height:108px}.is-home .player{margin-left:9px;margin-right:9px;padding:10px}.player .avatar{width:58px;height:58px;flex-basis:58px}.name{font-size:13px}.season-banner{height:151px;margin-left:9px;margin-right:9px}.season-copy strong{font-size:30px}.home-actions{margin-left:9px;margin-right:9px}.home-action{min-height:81px}.daily h3{font-size:10px}#page-home>.daily{margin-left:9px;margin-right:9px}.daily-icon{width:33px;flex-basis:33px}.daily-icon .icon{width:29px}.daily button{min-width:72px}.wallet-card{padding:7px;gap:7px}.wallet-card .balance{font-size:12px}}
 @media(prefers-reduced-motion:reduce){.loading-screen{transition:none}.app .page.active{animation:none}.xp-bar{transition:none}}
+
+/* Roadmap 3: persistent five-tab navigation. */
+.nav{padding:max(7px,env(safe-area-inset-bottom)) 6px 7px;height:calc(70px + env(safe-area-inset-bottom));bottom:0;width:100%;max-width:520px;border-width:1px 0 0;border-radius:20px 20px 0 0;background:linear-gradient(180deg,#101329f2,#090b18fa);box-shadow:0 -12px 35px #03040bcf;overflow:visible}
+.nav button{position:relative;display:flex;min-width:0;min-height:55px;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-radius:14px;color:#777d9a;isolation:isolate}
+.nav button:before{content:'';position:absolute;top:-8px;width:28px;height:3px;border-radius:0 0 4px 4px;background:transparent;box-shadow:none;transition:background .18s ease,box-shadow .18s ease}
+.nav button span{font-size:8px;font-weight:800;line-height:1.1;white-space:nowrap}.nav-icon{height:27px}.nav-icon .icon{width:21px;height:21px;transition:transform .18s ease,filter .18s ease}
+.nav button.active{background:radial-gradient(circle at 50% 20%,#9c68ff2d,transparent 65%);color:#b98bff;text-shadow:0 0 12px #9a62ff80}
+.nav button.active:before{background:#9a65ff;box-shadow:0 0 10px #a46dff}.nav button.active .icon{transform:translateY(-1px);filter:drop-shadow(0 0 6px #a45dff)}
+.nav button:focus-visible{outline:2px solid #67dcff;outline-offset:-2px}.app{padding-bottom:calc(94px + env(safe-area-inset-bottom))}
+@media(min-width:521px){.nav{bottom:12px;width:calc(100% - 24px);border-width:1px;border-radius:22px;padding-bottom:7px;height:70px}.app{padding-bottom:112px}}
