@@ -226,7 +226,7 @@ declare
   item text; item_value integer; item_bonus integer;
   lvl integer; cost bigint; code_value text;
   season_level integer; threshold integer;
-  tournament_id uuid;
+  active_tournament_id uuid;
 begin
   select * into p from players where telegram_id=p_telegram_id for update;
   if not found then raise exception 'Player not found'; end if;
@@ -252,7 +252,7 @@ begin
     insert into daily_progress(player_id,day,spins,wins,items) values(p_telegram_id,current_date,1,case when win_amount>0 then 1 else 0 end,case when drop_id is null then 0 else 1 end) on conflict(player_id,day) do update set spins=daily_progress.spins+1,wins=daily_progress.wins+excluded.wins,items=daily_progress.items+excluded.items;
     insert into weekly_progress(player_id,week_key,spins,wins,items) values(p_telegram_id,current_week_key(),1,case when win_amount>0 then 1 else 0 end,case when drop_id is null then 0 else 1 end) on conflict(player_id,week_key) do update set spins=weekly_progress.spins+1,wins=weekly_progress.wins+excluded.wins,items=weekly_progress.items+excluded.items;
     insert into season_progress(player_id,season_key,points) values(p_telegram_id,current_season_key(),10+case when win_amount>0 then 15 else 0 end) on conflict(player_id,season_key) do update set points=season_progress.points+excluded.points;
-    update tournament_entries set score=score+win_amount where player_id=p_telegram_id and tournament_id in(select id from tournaments where active and now() between starts_at and ends_at);
+    update tournament_entries te set score=te.score+win_amount where te.player_id=p_telegram_id and te.tournament_id in(select t.id from tournaments t where t.active and now() between t.starts_at and t.ends_at);
     perform apply_player_levels(p_telegram_id);
     return player_snapshot(p_telegram_id)||jsonb_build_object('event',jsonb_build_object('symbols',array[a,c,d],'win',win_amount,'drop',drop_id));
   elsif p_action='claim_daily' then
@@ -265,7 +265,7 @@ begin
     if claimed then raise exception 'Mission already claimed'; end if;
     select case mission when 'spins3' then spins when 'win1' then wins when 'item1' then items else -1 end into prog from daily_progress where player_id=p_telegram_id and day=current_date;
     reward_amount:=case mission when 'spins3' then 300 when 'win1' then 500 when 'item1' then 700 else 0 end;
-    if prog < case mission when 'spins3' then 3 when 'win1' then 1 when 'item1' then 1 else 999999 end then raise exception 'Mission is incomplete'; end if;
+    if prog < (case mission when 'spins3' then 3 when 'win1' then 1 when 'item1' then 1 else 999999 end) then raise exception 'Mission is incomplete'; end if;
     insert into mission_claims values(p_telegram_id,current_date::text,mission,now()); update players set balance=balance+reward_amount,xp=xp+25 where telegram_id=p_telegram_id;
   elsif p_action='buy_upgrade' then
     item:=p_payload->>'type'; if item not in ('luck','xp') then raise exception 'Invalid upgrade'; end if;
@@ -295,14 +295,14 @@ begin
   elsif p_action='claim_season' then
     season_level:=(p_payload->>'level')::int; threshold:=season_level*100; reward_amount:=season_level*1000;
     if coalesce((select points from season_progress where player_id=p_telegram_id and season_key=current_season_key()),0)<threshold then raise exception 'Season level is locked'; end if;
-    if coalesce((select claimed ? season_level::text from season_progress where player_id=p_telegram_id and season_key=current_season_key()),false) then raise exception 'Season reward already claimed'; end if;
-    update season_progress set claimed=claimed||jsonb_build_object(season_level::text,true) where player_id=p_telegram_id and season_key=current_season_key(); update players set balance=balance+reward_amount where telegram_id=p_telegram_id;
+    if coalesce((select sp.claimed ? season_level::text from season_progress sp where sp.player_id=p_telegram_id and sp.season_key=current_season_key()),false) then raise exception 'Season reward already claimed'; end if;
+    update season_progress sp set claimed=sp.claimed||jsonb_build_object(season_level::text,true) where sp.player_id=p_telegram_id and sp.season_key=current_season_key(); update players set balance=balance+reward_amount where telegram_id=p_telegram_id;
   elsif p_action='redeem_promo' then
     code_value:=upper(trim(p_payload->>'code')); select pc.reward into reward_amount from promo_codes pc where pc.code=code_value and pc.active and pc.uses<pc.max_uses and (pc.expires_at is null or pc.expires_at>now()) for update;
     if reward_amount is null then raise exception 'Promo code is invalid'; end if; if exists(select 1 from promo_redemptions where code=code_value and player_id=p_telegram_id) then raise exception 'Promo code already used'; end if;
     insert into promo_redemptions values(code_value,p_telegram_id,now()); update promo_codes set uses=uses+1 where code=code_value; update players set balance=balance+reward_amount where telegram_id=p_telegram_id;
   elsif p_action='tournament_join' then
-    select id into tournament_id from tournaments where active and now() between starts_at and ends_at order by ends_at limit 1; if tournament_id is null then raise exception 'No active tournament'; end if; insert into tournament_entries(tournament_id,player_id) values(tournament_id,p_telegram_id) on conflict do nothing;
+    select t.id into active_tournament_id from tournaments t where t.active and now() between t.starts_at and t.ends_at order by t.ends_at limit 1; if active_tournament_id is null then raise exception 'No active tournament'; end if; insert into tournament_entries(tournament_id,player_id) values(active_tournament_id,p_telegram_id) on conflict do nothing;
   elsif p_action='claim_league' then
     mission:='league_'||lower(p_payload->>'id'); select exists(select 1 from mission_claims where player_id=p_telegram_id and period='once' and mission_id=mission) into claimed; if claimed then raise exception 'League reward already claimed'; end if;
     threshold:=case p_payload->>'id' when 'Bronze' then 0 when 'Silver' then 10000 when 'Gold' then 50000 when 'Diamond' then 150000 else 999999999 end; reward_amount:=case p_payload->>'id' when 'Bronze' then 500 when 'Silver' then 1500 when 'Gold' then 5000 when 'Diamond' then 15000 else 0 end; if p.balance<threshold then raise exception 'League is locked'; end if; insert into mission_claims values(p_telegram_id,'once',mission,now()); update players set balance=balance+reward_amount where telegram_id=p_telegram_id;
@@ -322,12 +322,14 @@ declare target bigint; item text; amount bigint; tournament_id uuid;
 begin
   insert into admin_audit(admin_id,action,payload) values((p_admin->>'id')::bigint,p_action,p_payload);
   if p_action='overview' then
-    return jsonb_build_object('players',(select coalesce(jsonb_agg(to_jsonb(x)),'[]'::jsonb) from(select telegram_id,username,display_name,balance,level,spins,wins,blocked,is_owner,last_seen from players order by last_seen desc limit 200)x),'totals',(select jsonb_build_object('players',count(*),'coins',coalesce(sum(balance),0),'spins',coalesce(sum(spins),0)) from players),'promos',(select coalesce(jsonb_agg(to_jsonb(p)),'[]'::jsonb) from promo_codes p order by created_at desc),'tournaments',(select coalesce(jsonb_agg(to_jsonb(t)),'[]'::jsonb) from tournaments t order by created_at desc));
+    return jsonb_build_object('players',(select coalesce(jsonb_agg(to_jsonb(x)),'[]'::jsonb) from(select telegram_id,username,display_name,balance,level,spins,wins,blocked,is_owner,last_seen from players order by last_seen desc limit 200)x),'totals',(select jsonb_build_object('players',count(*),'coins',coalesce(sum(balance),0),'spins',coalesce(sum(spins),0)) from players),'promos',(select coalesce(jsonb_agg(to_jsonb(p) order by p.created_at desc),'[]'::jsonb) from promo_codes p),'tournaments',(select coalesce(jsonb_agg(to_jsonb(t) order by t.created_at desc),'[]'::jsonb) from tournaments t));
   end if;
   target:=(p_payload->>'telegram_id')::bigint;
   if p_action='grant_coins' then amount:=(p_payload->>'amount')::bigint; update players set balance=greatest(0,balance+amount) where telegram_id=target;
   elsif p_action='grant_item' then item:=p_payload->>'item_id'; amount:=greatest(1,coalesce((p_payload->>'count')::int,1)); insert into inventory(player_id,item_id,count) values(target,item,amount) on conflict(player_id,item_id) do update set count=inventory.count+excluded.count,discovered=true;
   elsif p_action='set_blocked' then update players set blocked=coalesce((p_payload->>'blocked')::boolean,false) where telegram_id=target;
+  elsif p_action='delete_player' then delete from players where telegram_id=target;
+  elsif p_action='delete_promo' then delete from promo_codes where code=upper(trim(p_payload->>'code'));
   elsif p_action='create_promo' then insert into promo_codes(code,reward,max_uses,expires_at) values(upper(trim(p_payload->>'code')),(p_payload->>'reward')::bigint,coalesce((p_payload->>'max_uses')::int,100),(p_payload->>'expires_at')::timestamptz) on conflict(code) do update set reward=excluded.reward,max_uses=excluded.max_uses,expires_at=excluded.expires_at,active=true;
   elsif p_action='set_config' then update game_config set config=config||p_payload,updated_at=now() where id=true;
   elsif p_action='create_tournament' then insert into tournaments(name,starts_at,ends_at,reward_pool) values(p_payload->>'name',coalesce((p_payload->>'starts_at')::timestamptz,now()),(p_payload->>'ends_at')::timestamptz,coalesce((p_payload->>'reward_pool')::bigint,10000)) returning id into tournament_id;
@@ -338,3 +340,15 @@ end $$;
 insert into tournaments(name,starts_at,ends_at,reward_pool)
 select 'Launch Tournament',now(),now()+interval '30 days',50000
 where not exists(select 1 from tournaments where active and now() between starts_at and ends_at);
+
+revoke all on function current_week_key() from public, anon, authenticated;
+revoke all on function current_season_key() from public, anon, authenticated;
+revoke all on function apply_player_levels(bigint) from public, anon, authenticated;
+revoke all on function player_snapshot(bigint) from public, anon, authenticated;
+revoke all on function bootstrap_player(jsonb,text,boolean) from public, anon, authenticated;
+revoke all on function game_action(bigint,text,jsonb,boolean) from public, anon, authenticated;
+revoke all on function admin_action(jsonb,text,jsonb) from public, anon, authenticated;
+
+grant execute on function bootstrap_player(jsonb,text,boolean) to service_role;
+grant execute on function game_action(bigint,text,jsonb,boolean) to service_role;
+grant execute on function admin_action(jsonb,text,jsonb) to service_role;

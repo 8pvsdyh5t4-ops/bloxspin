@@ -18,4 +18,4 @@ Telegram Mini App with a Vercel API and Supabase database.
 3. Redeploy the latest commit.
 4. Open the Mini App from Telegram. The green status dot means the authoritative server is active.
 
-The service role key is used only by Vercel functions. It must never be placed in client-side code.
+The Supabase secret key is used only by Vercel functions. It must never be placed in client-side code.

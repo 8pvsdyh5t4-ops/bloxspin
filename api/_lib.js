@@ -32,11 +32,12 @@ function verifyTelegram(initData) {
 }
 
 const ownerNames = () => (process.env.OWNER_TELEGRAM_USERNAMES || 'megarel1g').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
-const isOwner = user => ownerNames().includes(String(user.username || '').toLowerCase());
+const ownerIds = () => (process.env.OWNER_TELEGRAM_IDS || '').split(',').map(x => x.trim()).filter(Boolean);
+const isOwner = user => ownerIds().includes(String(user.id)) || ownerNames().includes(String(user.username || '').toLowerCase());
 
 async function supabase(path, { method = 'GET', body, query = '' } = {}) {
   const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error('Database is not configured');
   const response = await fetch(`${url}/rest/v1/${path}${query}`, {
     method,
