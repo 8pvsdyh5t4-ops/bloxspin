@@ -1,4 +1,33 @@
-const { json, readBody, verifyTelegram, isOwner, rpc, publicUser } = require('./_lib');
+const { json, readBody, verifyTelegram, isOwner, supabase, rpc, publicUser } = require('./_lib');
+
+const itemUpgradeBase = { block: 50, sword: 150, pet: 400, crystal: 900, crown: 2000, secret: 5000 };
+
+async function upgradeItem(user, payload) {
+  const itemId = String(payload.item_id || '');
+  if (!itemUpgradeBase[itemId]) throw new Error('Invalid item');
+  const uid = Number(user.id);
+  const [players, inventory] = await Promise.all([
+    supabase('players', { query: `?telegram_id=eq.${uid}&select=balance,upgrades` }),
+    supabase('inventory', { query: `?player_id=eq.${uid}&item_id=eq.${encodeURIComponent(itemId)}&count=gt.0&select=count` })
+  ]);
+  const player = players?.[0];
+  if (!player || !inventory?.[0]) throw new Error('Item not owned');
+  const upgrades = player.upgrades && typeof player.upgrades === 'object' ? player.upgrades : {};
+  const itemLevels = upgrades.itemLevels && typeof upgrades.itemLevels === 'object' ? upgrades.itemLevels : {};
+  const level = Math.max(1, Number(itemLevels[itemId]) || 1);
+  if (level >= 5) throw new Error('Item is maxed');
+  const cost = itemUpgradeBase[itemId] * (level + 1);
+  const balance = Number(player.balance) || 0;
+  if (balance < cost) throw new Error('Not enough coins');
+  const nextUpgrades = { ...upgrades, itemLevels: { ...itemLevels, [itemId]: level + 1 } };
+  const updated = await supabase('players', {
+    method: 'PATCH',
+    query: `?telegram_id=eq.${uid}&balance=eq.${balance}`,
+    body: { balance: balance - cost, upgrades: nextUpgrades }
+  });
+  if (!updated?.length) throw new Error('Profile changed, try again');
+  return rpc('player_snapshot', { p_id: uid });
+}
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'POST required' });
@@ -6,8 +35,13 @@ module.exports = async function handler(req, res) {
     const user = verifyTelegram(req.headers['x-telegram-init-data']);
     const body = await readBody(req);
     const action = String(body.action || 'bootstrap');
-    const allowed = new Set(['bootstrap', 'spin', 'claim_daily', 'claim_mission', 'buy_upgrade', 'item_action', 'claim_achievement', 'claim_league', 'rescue', 'open_chest', 'claim_season', 'claim_weekly', 'redeem_promo', 'referral_info', 'tournament_join']);
+    const allowed = new Set(['bootstrap', 'spin', 'claim_daily', 'claim_mission', 'buy_upgrade', 'upgrade_item', 'item_action', 'claim_achievement', 'claim_league', 'rescue', 'open_chest', 'claim_season', 'claim_weekly', 'redeem_promo', 'referral_info', 'tournament_join']);
     if (!allowed.has(action)) return json(res, 400, { ok: false, error: 'Unknown action' });
+    if (action === 'upgrade_item') {
+      const payload = await upgradeItem(user, body.payload || {});
+      if (payload && typeof payload === 'object') payload.bot_username = process.env.TELEGRAM_BOT_USERNAME || '';
+      return json(res, 200, { ok: true, data: payload });
+    }
     const payload = await rpc(action === 'bootstrap' ? 'bootstrap_player' : 'game_action', action === 'bootstrap' ? {
       p_user: publicUser(user),
       p_start_param: body.start_param || '',

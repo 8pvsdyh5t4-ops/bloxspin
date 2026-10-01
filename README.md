@@ -11,6 +11,10 @@ Telegram Mini App with a Vercel API and Supabase database.
 - `api/_lib.js` — Telegram signature verification and Supabase REST client.
 - `supabase/schema.sql` — tables, row-level security, atomic game functions, referrals, promos, seasons and tournaments.
 
+## Items and inventory
+
+Every item defines a category, rarity, combat bonuses and base Power. The inventory displays quantity, level, Power and equipped state, selects the strongest owned item automatically and supports category filters. Item upgrades currently have five levels, cost Coins and are saved in the player's existing server-side `upgrades` profile. The later ten-level material progression remains a separate roadmap stage.
+
 ## Setup
 
 1. Create a Supabase project and run `supabase/schema.sql` in its SQL editor.
