@@ -1,0 +1,41 @@
+/* Roadmap 4: hero and equipment presentation. */
+body[data-page="profile"] .app>.player{display:none}
+body[data-page="profile"] .header{padding-bottom:3px}
+#page-profile{padding-bottom:12px}
+.hero-title{display:flex;align-items:center;justify-content:space-between;padding:10px 18px 8px}
+.hero-title span,.hero-section-label{font-size:8px;font-weight:900;letter-spacing:.18em;color:#8f82ad}
+.hero-title h2{margin-top:3px;font-size:23px;letter-spacing:-.035em}
+.hero-title>button{width:31px;height:31px;border:1px solid #8466cb80;border-radius:50%;background:#17132d;color:#cdb8ff;font-weight:900}
+.hero-loadout{margin:0 12px}
+.hero-stage{position:relative;height:490px;overflow:hidden;border:1px solid #713eff8c;border-radius:22px;background:radial-gradient(circle at 50% 42%,#48209b85 0,#111740 42%,#080c22 78%);box-shadow:inset 0 1px #d8c1ff24,0 18px 45px #0008;isolation:isolate}
+.hero-stage:after{content:'';position:absolute;inset:0;background:linear-gradient(transparent 73%,#080b1cf5);z-index:-1}
+.hero-grid{position:absolute;inset:0;z-index:-2;opacity:.24;background-image:linear-gradient(#6d63bb2c 1px,transparent 1px),linear-gradient(90deg,#6d63bb2c 1px,transparent 1px);background-size:24px 24px;mask-image:linear-gradient(transparent,#000 30%,#000 82%,transparent)}
+.hero-aura{position:absolute;left:50%;top:46%;width:270px;height:270px;transform:translate(-50%,-50%);border:2px solid #b045ff8c;border-radius:50%;box-shadow:inset 0 0 45px #792dff75,0 0 38px #742cff80;animation:hero-pulse 2.7s ease-in-out infinite}
+.hero-aura:before,.hero-aura:after{content:'';position:absolute;border:1px solid #56d8ff64;border-radius:50%;inset:18px}.hero-aura:after{inset:42px;border-color:#ff62e670}
+.hero-character{position:absolute;z-index:1;left:50%;top:8px;width:335px;max-width:84%;height:410px;object-fit:contain;transform:translateX(-50%);filter:drop-shadow(0 14px 24px #02030b) drop-shadow(0 0 13px #8f35ff66);transition:filter .25s ease,transform .25s ease}
+.hero-loadout[data-equipped="sword"] .hero-character{filter:drop-shadow(16px 5px 18px #d41dff) drop-shadow(0 15px 25px #02030b)}
+.hero-loadout[data-equipped="pet"] .hero-character{filter:drop-shadow(-13px -3px 19px #18dfff) drop-shadow(0 15px 25px #02030b)}
+.hero-loadout[data-equipped="crown"] .hero-character{filter:drop-shadow(0 -7px 18px #ffcc36) drop-shadow(0 15px 25px #02030b)}
+.hero-loadout[data-equipped="crystal"] .hero-aura{border-color:#51e6ff;box-shadow:inset 0 0 55px #324fff88,0 0 50px #2cd9ff}
+.hero-loadout[data-equipped="block"] .hero-character{filter:drop-shadow(0 0 22px #557dff) drop-shadow(0 15px 25px #02030b)}
+.hero-loadout[data-equipped="secret"] .hero-character{filter:drop-shadow(0 0 26px #f244ff) drop-shadow(0 0 13px #4eeaff)}
+.hero-slot-column{position:absolute;z-index:3;top:18px;bottom:90px;display:flex;flex-direction:column;justify-content:space-between}
+.hero-slots-left{left:9px}.hero-slots-right{right:9px}
+.hero-slot{width:73px;min-height:83px;padding:6px 4px;border:1px solid #5d538268;border-radius:13px;background:linear-gradient(145deg,#171630e8,#0d1027e8);color:#d6cbea;box-shadow:inset 0 1px #ffffff17,0 7px 18px #0005;backdrop-filter:blur(8px)}
+.hero-slot-icon{display:grid;place-items:center;width:39px;height:39px;margin:auto;border-radius:10px;background:#261c4c;color:#736a95}
+.hero-slot-icon .icon{width:26px;height:26px}.hero-slot strong{display:block;font-size:9px;margin-top:5px}.hero-slot small{display:block;font-size:7px;color:#746e88;margin-top:2px}
+.hero-slot.owned{border-color:#865bea99}.hero-slot.owned .hero-slot-icon{color:#c98cff;background:#6d27c83d;filter:drop-shadow(0 0 5px #a741ff)}
+.hero-slot.equipped{border-color:#f4c84f;background:linear-gradient(145deg,#4d321de8,#19142ce8);box-shadow:inset 0 0 14px #ffca3630,0 0 15px #ffb92a42}
+.hero-slot.equipped .hero-slot-icon{color:#ffd95f;background:#ae651b40;filter:drop-shadow(0 0 6px #ffbd32)}.hero-slot.equipped small{color:#ffdc72}
+.hero-equipped-card{position:absolute;z-index:4;left:50%;bottom:15px;transform:translateX(-50%);width:210px;text-align:center;border:1px solid #a06cff95;border-radius:14px;background:#0d0c24e8;padding:9px 12px;box-shadow:0 0 22px #7135e465;backdrop-filter:blur(10px)}
+.hero-equipped-card small{display:block;font-size:7px;color:#9c8fb6;letter-spacing:.15em}.hero-equipped-card strong{display:block;font-size:14px;margin-top:3px;color:#ffe176}.hero-equipped-card span{display:block;font-size:8px;margin-top:3px;color:#bfb3d3}
+.hero-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:10px}.hero-actions button{height:48px;border-radius:12px;font-size:12px;font-weight:900}
+.hero-remove{border:1px solid #ffd05f99;background:linear-gradient(135deg,#f8c54a,#da8f24);color:#301b05;box-shadow:inset 0 1px #fff1af}.hero-remove:disabled{border-color:#ffffff12;background:#17172a;color:#625f75;box-shadow:none}
+.hero-section-label{margin:20px 17px 10px}
+.hero-equipment-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 12px}
+.hero-equipment-summary button{min-width:0;padding:10px 5px;border:1px solid #3b365760;border-radius:13px;background:#101229;color:#7f7892}.hero-equipment-summary span{display:grid;place-items:center;width:35px;height:35px;margin:auto;border-radius:9px;background:#1c1936}.hero-equipment-summary .icon{width:23px;height:23px}.hero-equipment-summary strong{display:block;font-size:9px;margin-top:5px}.hero-equipment-summary small{display:block;font-size:7px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hero-equipment-summary button.owned{color:#caaaff;border-color:#7457bc80}.hero-equipment-summary button.active{color:#ffdf71;border-color:#eec250;box-shadow:0 0 12px #dc98352b}
+.profile-more{margin:18px 0 0}.profile-more>summary{margin:0 18px;padding:13px 0;border-top:1px solid #ffffff10;color:#a296b6;font-size:10px;cursor:pointer}
+@keyframes hero-pulse{50%{transform:translate(-50%,-50%) scale(1.05);opacity:.75}}
+@media(max-width:370px){.hero-stage{height:440px}.hero-character{height:365px;max-width:82%}.hero-aura{width:230px;height:230px}.hero-slot{width:62px;min-height:73px;padding:4px 2px}.hero-slot-icon{width:33px;height:33px}.hero-slot-icon .icon{width:22px;height:22px}.hero-slot strong{font-size:8px}.hero-slot small{font-size:6px}.hero-equipped-card{width:185px;bottom:12px}.hero-slot-column{bottom:82px}.hero-title{padding-left:13px;padding-right:13px}.hero-loadout,.hero-equipment-summary{margin-left:8px;margin-right:8px}}
+@media(prefers-reduced-motion:reduce){.hero-aura{animation:none}}
