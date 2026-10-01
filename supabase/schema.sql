@@ -244,7 +244,7 @@ begin
     chance:=least(.75,.38+(b/100-1)*.03+coalesce((p.upgrades->>'luck')::int,0)*.03);
     if random()<chance then
       roll:=random()*100;
-      drop_id:=case when roll<38 then 'block' when roll<63 then 'sword' when roll<79 then 'pet' when roll<89 then 'crystal' when roll<96 then 'crown' else 'secret' end;
+      drop_id:=case when roll<68 then 'block' when roll<92 then 'sword' when roll<98.5 then 'pet' when roll<99.7 then 'crystal' when roll<99.98 then 'crown' else 'secret' end;
       insert into inventory(player_id,item_id,count) values(p_telegram_id,drop_id,1) on conflict(player_id,item_id) do update set count=inventory.count+1,discovered=true;
     end if;
     update players set balance=balance-b+win_amount,bet=b,spins=spins+1,wins=wins+case when win_amount>0 then 1 else 0 end,total_won=total_won+win_amount,best_win=greatest(best_win,win_amount),total_wagered=total_wagered+b,xp=xp+20+coalesce((upgrades->>'xp')::int,0)*5+case when win_amount>0 then 25 else 0 end where telegram_id=p_telegram_id;

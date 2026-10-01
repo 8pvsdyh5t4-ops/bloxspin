@@ -15,7 +15,7 @@ Telegram Mini App with a Vercel API and Supabase database.
 
 Every item defines a category, rarity, combat bonuses and base Power. The inventory displays quantity, level, Power and equipped state, selects the strongest owned item automatically and supports category filters. Item upgrades have ten levels, increasing Coin costs and duplicate-item material requirements from level 4. Levels and material consumption are saved in the player's server-side profile and inventory.
 
-The Play page uses the BloxSpin machine with block items instead of fruit symbols: armor, weapons, pets, crystals, crowns and mystery items. It exposes the supported 100, 250 and 500 Coin stakes and previews all six reward tiers; exact roadmap drop percentages remain a later stage.
+The Play page uses the BloxSpin machine with block items instead of fruit symbols: armor, weapons, pets, crystals, crowns and mystery items. It exposes the supported 100, 250 and 500 Coin stakes and previews all six reward tiers. Item drops use the exact roadmap distribution: Common 68%, Rare 24%, Epic 6.5%, Mythic 1.2%, Legendary 0.28% and Secret 0.02%. A dedicated reveal screen shows the item's rarity, name and Power; Legendary and Secret drops receive additional visual effects.
 
 ## Setup
 

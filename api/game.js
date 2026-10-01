@@ -1,6 +1,52 @@
+const crypto = require('crypto');
 const { json, readBody, verifyTelegram, isOwner, supabase, rpc, publicUser } = require('./_lib');
 
 const itemUpgradeBase = { block: 50, sword: 150, pet: 400, crystal: 900, crown: 2000, secret: 5000 };
+const rollDropId = () => {
+  const roll = crypto.randomInt(10000);
+  if (roll < 6800) return 'block';
+  if (roll < 9200) return 'sword';
+  if (roll < 9850) return 'pet';
+  if (roll < 9970) return 'crystal';
+  if (roll < 9998) return 'crown';
+  return 'secret';
+};
+
+async function normalizeSpinDrop(user, payload) {
+  const oldItem = payload?.event?.drop;
+  if (!oldItem) return payload;
+  const nextItem = rollDropId();
+  if (oldItem === nextItem) return payload;
+  const uid = Number(user.id);
+  const oldCount = Number(payload.inventory?.[oldItem]) || 0;
+  if (oldCount < 1) throw new Error('Drop inventory is out of sync');
+  const nextRows = await supabase('inventory', { query: `?player_id=eq.${uid}&item_id=eq.${encodeURIComponent(nextItem)}&select=count` });
+  const nextCount = Number(nextRows?.[0]?.count) || 0;
+  const removed = await supabase('inventory', {
+    method: 'PATCH',
+    query: `?player_id=eq.${uid}&item_id=eq.${encodeURIComponent(oldItem)}&count=eq.${oldCount}`,
+    body: { count: oldCount - 1 }
+  });
+  if (!removed?.length) throw new Error('Drop inventory changed, try again');
+  try {
+    await supabase('inventory', {
+      method: 'POST',
+      query: '?on_conflict=player_id,item_id',
+      prefer: 'resolution=merge-duplicates,return=representation',
+      body: { player_id: uid, item_id: nextItem, count: nextCount + 1, discovered: true }
+    });
+  } catch (error) {
+    await supabase('inventory', {
+      method: 'PATCH',
+      query: `?player_id=eq.${uid}&item_id=eq.${encodeURIComponent(oldItem)}&count=eq.${oldCount - 1}`,
+      body: { count: oldCount }
+    }).catch(() => {});
+    throw error;
+  }
+  const snapshot = await rpc('player_snapshot', { p_id: uid });
+  snapshot.event = { ...payload.event, drop: nextItem };
+  return snapshot;
+}
 
 async function upgradeItem(user, payload) {
   const itemId = String(payload.item_id || '');
@@ -60,7 +106,7 @@ module.exports = async function handler(req, res) {
       if (payload && typeof payload === 'object') payload.bot_username = process.env.TELEGRAM_BOT_USERNAME || '';
       return json(res, 200, { ok: true, data: payload });
     }
-    const payload = await rpc(action === 'bootstrap' ? 'bootstrap_player' : 'game_action', action === 'bootstrap' ? {
+    let payload = await rpc(action === 'bootstrap' ? 'bootstrap_player' : 'game_action', action === 'bootstrap' ? {
       p_user: publicUser(user),
       p_start_param: body.start_param || '',
       p_is_owner: isOwner(user)
@@ -70,6 +116,7 @@ module.exports = async function handler(req, res) {
       p_payload: body.payload || {},
       p_is_owner: isOwner(user)
     });
+    if (action === 'spin') payload = await normalizeSpinDrop(user, payload);
     if (payload && typeof payload === 'object') payload.bot_username = process.env.TELEGRAM_BOT_USERNAME || '';
     return json(res, 200, { ok: true, data: payload });
   } catch (error) {

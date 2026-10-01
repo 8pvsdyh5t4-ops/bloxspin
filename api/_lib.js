@@ -35,7 +35,7 @@ const ownerNames = () => (process.env.OWNER_TELEGRAM_USERNAMES || 'megarel1g').s
 const ownerIds = () => (process.env.OWNER_TELEGRAM_IDS || '').split(',').map(x => x.trim()).filter(Boolean);
 const isOwner = user => ownerIds().includes(String(user.id)) || ownerNames().includes(String(user.username || '').toLowerCase());
 
-async function supabase(path, { method = 'GET', body, query = '' } = {}) {
+async function supabase(path, { method = 'GET', body, query = '', prefer } = {}) {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error('Database is not configured');
@@ -45,7 +45,7 @@ async function supabase(path, { method = 'GET', body, query = '' } = {}) {
       apikey: key,
       Authorization: `Bearer ${key}`,
       'Content-Type': 'application/json',
-      Prefer: method === 'POST' || method === 'PATCH' ? 'return=representation' : undefined
+      Prefer: prefer || (method === 'POST' || method === 'PATCH' ? 'return=representation' : undefined)
     },
     body: body === undefined ? undefined : JSON.stringify(body)
   });
