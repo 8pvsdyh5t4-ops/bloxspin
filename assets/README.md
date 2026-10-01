@@ -8,8 +8,10 @@ Created with the built-in ImageGen tool using the user's approved six-screen Blo
 
 The loading screen waits for both decoded images, fonts, Telegram SDK readiness, the player bootstrap and the first rendered frame. Its five progress steps measure readiness, not downloaded bytes. Failed authenticated bootstraps show retry instead of opening a local account.
 
-Crystals and Power show a dash until actual server fields exist. No new currency, combat stats or arena system is introduced. The disabled Arena shortcut is explicitly marked as coming later. Play and Spin both open the existing play screen until the PvE stage is implemented.
+Crystals show a dash until an actual server field exists. The disabled Arena shortcut is explicitly marked as coming later. Play and Spin both open the existing play screen until the PvE stage is implemented.
 
 The hero equipment screen maps the existing collection to six visual roles: crown → Crown, sword → Weapon, block → Armor, pet → Pet, crystal → Aura, secret → Skin. This adds no new item economy or combat-stat system.
+
+Hero characteristics are derived deterministically from synchronized player progression: level, equipped-item bonus, discovered collection and Luck/XP upgrades. The screen shows HP, attack, defense, speed, critical chance, critical damage and a weighted overall Power. The same Power is shown on Home and updates immediately after progression or equipment changes.
 
 Verified locally at 320px and 390px widths: existing browser save, server-backed profile using isolated fixtures, delayed bootstrap, failed bootstrap/retry state, unavailable local storage, daily claim and disabled claimed state, Spin and season shortcuts. Real production mutations are not used for UI tests.
