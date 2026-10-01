@@ -1,0 +1,12 @@
+# Home artwork
+
+Created with the built-in ImageGen tool using the user's approved six-screen BloxSpin reference supplied on 2026-10-01. These are recreated production assets, not crops of the mockup. Only its first (home) screen is implemented in this update.
+
+- `bloxspin-logo.png`: wide 3:1 BloxSpin header; chunky extruded gold/orange and pink/purple lettering, golden crown, violet cubic city, blue crystals, no phone frame or controls.
+- `cyber-world.png`: square loading and seasonal artwork; blocky brown-haired hero, purple sunglasses, black crown T-shirt, purple crystal sword, floating black cubic cat with cyan eyes, neon cyber city; no text or UI.
+
+The loading screen waits for both decoded images, fonts, Telegram SDK readiness, the player bootstrap and the first rendered frame. Its five progress steps measure readiness, not downloaded bytes. Failed authenticated bootstraps show retry instead of opening a local account.
+
+Crystals and Power show a dash until actual server fields exist. No new currency, combat stats, arena, hero screen or navigation system is introduced. The disabled Arena shortcut is explicitly marked as coming later. Play and Spin both open the existing play screen until the PvE stage is implemented.
+
+Verified locally at 320px and 390px widths: existing browser save, server-backed profile using isolated fixtures, delayed bootstrap, failed bootstrap/retry state, unavailable local storage, daily claim and disabled claimed state, Spin and season shortcuts. Real production mutations are not used for UI tests.
