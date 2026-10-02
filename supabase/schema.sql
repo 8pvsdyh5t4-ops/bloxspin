@@ -135,7 +135,10 @@ create table if not exists pvp_matches (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-create index if not exists pvp_matches_players_idx on pvp_matches(player_one, player_two, updated_at desc);
+create index if not exists pvp_matches_player_one_idx on pvp_matches(player_one, updated_at desc);
+create index if not exists pvp_matches_player_two_idx on pvp_matches(player_two, updated_at desc);
+create index if not exists pvp_matches_active_one_idx on pvp_matches(player_one, updated_at desc) where status='active';
+create index if not exists pvp_matches_active_two_idx on pvp_matches(player_two, updated_at desc) where status='active';
 
 create table if not exists game_config (
   id boolean primary key default true check (id),
