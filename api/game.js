@@ -208,25 +208,40 @@ async function battleStart(user, payload) {
   return snapshot;
 }
 
-async function pvpMatch(user) {
+async function pvpTargets(user) {
+  const uid = Number(user.id);
+  const candidates = await supabase('players', { query: `?telegram_id=neq.${uid}&blocked=eq.false&select=telegram_id,display_name,photo_url,level,equipped_id,upgrades,last_seen&order=last_seen.desc&limit=12` });
+  const targets = await Promise.all((candidates || []).map(async opponent => {
+    const inventory = await supabase('inventory', { query: `?player_id=eq.${Number(opponent.telegram_id)}&count=gt.0&select=item_id,count` });
+    const stats = calculateHeroStats(opponent, inventory || []);
+    return { id: String(opponent.telegram_id), name: opponent.display_name || 'Игрок', photo: opponent.photo_url || '', level: Number(opponent.level) || 1, equipment: opponent.equipped_id || '', power: stats.power, online: Date.now() - new Date(opponent.last_seen || 0).getTime() < 120000 };
+  }));
+  const snapshot = await rpc('player_snapshot', { p_id: uid });
+  snapshot.event = { status: 'targets', targets };
+  return snapshot;
+}
+
+async function pvpMatch(user, payload = {}) {
   const uid = Number(user.id);
   const [players, inventory, candidates] = await Promise.all([
     supabase('players', { query: `?telegram_id=eq.${uid}&select=balance,level,xp,equipped_id,upgrades,blocked` }),
     supabase('inventory', { query: `?player_id=eq.${uid}&count=gt.0&select=item_id,count` }),
-    supabase('players', { query: `?telegram_id=neq.${uid}&blocked=eq.false&select=telegram_id,display_name,photo_url,level,equipped_id,upgrades&limit=20` })
+    supabase('players', { query: `?telegram_id=neq.${uid}&blocked=eq.false&select=telegram_id,display_name,photo_url,level,equipped_id,upgrades,last_seen&limit=20` })
   ]);
   const player = players?.[0];
   if (!player) throw new Error('Player not found');
   if (player.blocked) throw new Error('Account is blocked');
   const hero = calculateHeroStats(player, inventory || []);
-  let opponent = [...(candidates || [])].sort((a, b) => Math.abs(Number(a.level) - Number(player.level)) - Math.abs(Number(b.level) - Number(player.level)))[0];
+  const selectedId = Number(payload.opponent_id) || 0;
+  let opponent = selectedId ? (candidates || []).find(candidate => Number(candidate.telegram_id) === selectedId) : [...(candidates || [])].sort((a, b) => Math.abs(Number(a.level) - Number(player.level)) - Math.abs(Number(b.level) - Number(player.level)))[0];
+  if (selectedId && !opponent) throw new Error('Opponent is unavailable');
   let opponentInventory = [];
   if (opponent) opponentInventory = await supabase('inventory', { query: `?player_id=eq.${Number(opponent.telegram_id)}&count=gt.0&select=item_id,count` });
   else opponent = { telegram_id: 0, display_name: 'ShadowKing', photo_url: '', level: Math.max(1, Number(player.level)), equipped_id: 'sword', upgrades: { luck: 1, xp: 1, itemLevels: { sword: 3 } } }, opponentInventory = [{ item_id: 'sword', count: 1 }];
   const rival = calculateHeroStats(opponent, opponentInventory || []);
   const enemy = { id: `pvp_${opponent.telegram_id}`, name: opponent.display_name || 'Соперник', type: 'assassin', power: rival.power, reward: [700, 1800], xp: 120 };
   const battle = createBattleState(hero, enemy, inventory || [], 'pvp');
-  Object.assign(battle, { opponentLevel: Number(opponent.level) || 1, opponentEquipment: opponent.equipped_id || '', opponentPhoto: opponent.photo_url || '' });
+  Object.assign(battle, { opponentId: String(opponent.telegram_id), opponentLevel: Number(opponent.level) || 1, opponentEquipment: opponent.equipped_id || '', opponentPhoto: opponent.photo_url || '', opponentOnline: Date.now() - new Date(opponent.last_seen || 0).getTime() < 120000 });
   const upgrades = player.upgrades && typeof player.upgrades === 'object' ? player.upgrades : {};
   const updated = await supabase('players', { method: 'PATCH', query: `?telegram_id=eq.${uid}&balance=eq.${Number(player.balance) || 0}&xp=eq.${Number(player.xp) || 0}`, body: { upgrades: { ...upgrades, battle } } });
   if (!updated?.length) throw new Error('Profile changed, try again');
@@ -418,7 +433,7 @@ module.exports = async function handler(req, res) {
     const user = verifyTelegram(req.headers['x-telegram-init-data']);
     const body = await readBody(req);
     const action = String(body.action || 'bootstrap');
-    const allowed = new Set(['bootstrap', 'spin', 'pve_fight', 'battle_start', 'battle_turn', 'pvp_match', 'survivor_start', 'survivor_finish', 'claim_daily', 'claim_mission', 'buy_upgrade', 'upgrade_item', 'item_action', 'claim_achievement', 'claim_league', 'rescue', 'open_chest', 'claim_season', 'claim_weekly', 'redeem_promo', 'referral_info', 'tournament_join']);
+    const allowed = new Set(['bootstrap', 'spin', 'pve_fight', 'battle_start', 'battle_turn', 'pvp_targets', 'pvp_match', 'survivor_start', 'survivor_finish', 'claim_daily', 'claim_mission', 'buy_upgrade', 'upgrade_item', 'item_action', 'claim_achievement', 'claim_league', 'rescue', 'open_chest', 'claim_season', 'claim_weekly', 'redeem_promo', 'referral_info', 'tournament_join']);
     if (!allowed.has(action)) return json(res, 400, { ok: false, error: 'Unknown action' });
     if (action === 'upgrade_item') {
       const payload = await upgradeItem(user, body.payload || {});
@@ -435,8 +450,8 @@ module.exports = async function handler(req, res) {
       if (payload && typeof payload === 'object') payload.bot_username = process.env.TELEGRAM_BOT_USERNAME || '';
       return json(res, 200, { ok: true, data: payload });
     }
-    if (action === 'pvp_match') {
-      const payload = await pvpMatch(user);
+    if (action === 'pvp_targets' || action === 'pvp_match') {
+      const payload = action === 'pvp_targets' ? await pvpTargets(user) : await pvpMatch(user, body.payload || {});
       if (payload && typeof payload === 'object') payload.bot_username = process.env.TELEGRAM_BOT_USERNAME || '';
       return json(res, 200, { ok: true, data: payload });
     }
