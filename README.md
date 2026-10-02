@@ -27,3 +27,7 @@ The PvE page offers three opponent tiers: a normal Raider, an elite Warden and t
 4. Open the Mini App from Telegram. The green status dot means the authoritative server is active.
 
 The Supabase secret key is used only by Vercel functions. It must never be placed in client-side code.
+
+- Five PvE bot classes (Tank, Assassin, Mage, Summoner, Boss), each with a distinct combat ability.
+- Turn-based combat with HP, defense, critical hits, skills, pets, auras, victory and defeat states.
+- Endless Tower with rising floor power, mini-bosses every 5 floors, major bosses every 10 floors, rewards, and a saved personal record.
