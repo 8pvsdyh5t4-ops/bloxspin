@@ -21,6 +21,11 @@ const bossEnemies = {
   inferno: { id: 'inferno', name: 'Инферно Голем', type: 'boss', power: 12000, reward: [3000, 11000], xp: 300, phases: ['Каменная броня', 'Вулканическая ярость', 'Огненный апокалипсис'], dropChance: 22, dropId: 'crystal' },
   seasonal: { id: 'seasonal', name: 'Кибер-Дракон', type: 'boss', power: 15500, reward: [5000, 16000], xp: 450, phases: ['Плазменный щит', 'Рой дронов', 'Квантовый шторм'], dropChance: 35, dropId: 'crown', seasonal: true }
 };
+const pvpBots = [
+  { id: 'bot_shadow', telegram_id: 0, display_name: 'ShadowKing', photo_url: '', level: 8, equipped_id: 'sword', upgrades: { luck: 1, xp: 1, itemLevels: { sword: 3 } }, powerScale: 0.9 },
+  { id: 'bot_cyber', telegram_id: 0, display_name: 'CyberNinja', photo_url: '', level: 12, equipped_id: 'crystal', upgrades: { luck: 2, xp: 2, itemLevels: { crystal: 2 } }, powerScale: 1.02 },
+  { id: 'bot_master', telegram_id: 0, display_name: 'BloxMaster', photo_url: '', level: 16, equipped_id: 'crown', upgrades: { luck: 3, xp: 2, itemLevels: { crown: 3 } }, powerScale: 1.14 }
+];
 const rollDropId = () => {
   const roll = crypto.randomInt(10000);
   if (roll < 6800) return 'block';
@@ -216,6 +221,12 @@ async function pvpTargets(user) {
     const stats = calculateHeroStats(opponent, inventory || []);
     return { id: String(opponent.telegram_id), name: opponent.display_name || 'Игрок', photo: opponent.photo_url || '', level: Number(opponent.level) || 1, equipment: opponent.equipped_id || '', power: stats.power, online: Date.now() - new Date(opponent.last_seen || 0).getTime() < 120000 };
   }));
+  if (targets.length < 3) {
+    const ownRows = await supabase('players', { query: `?telegram_id=eq.${uid}&select=level,equipped_id,upgrades` });
+    const ownInventory = await supabase('inventory', { query: `?player_id=eq.${uid}&count=gt.0&select=item_id,count` });
+    const ownPower = calculateHeroPower(ownRows?.[0] || { level: 1, upgrades: {} }, ownInventory || []);
+    for (const bot of pvpBots.slice(0, 3 - targets.length)) targets.push({ id: bot.id, name: bot.display_name, photo: '', level: bot.level, equipment: bot.equipped_id, power: Math.round(ownPower * bot.powerScale), online: false, training: true });
+  }
   const snapshot = await rpc('player_snapshot', { p_id: uid });
   snapshot.event = { status: 'targets', targets };
   return snapshot;
@@ -232,16 +243,26 @@ async function pvpMatch(user, payload = {}) {
   if (!player) throw new Error('Player not found');
   if (player.blocked) throw new Error('Account is blocked');
   const hero = calculateHeroStats(player, inventory || []);
-  const selectedId = Number(payload.opponent_id) || 0;
-  let opponent = selectedId ? (candidates || []).find(candidate => Number(candidate.telegram_id) === selectedId) : [...(candidates || [])].sort((a, b) => Math.abs(Number(a.level) - Number(player.level)) - Math.abs(Number(b.level) - Number(player.level)))[0];
-  if (selectedId && !opponent) throw new Error('Opponent is unavailable');
+  const selectedKey = String(payload.opponent_id || '');
+  const selectedId = Number(selectedKey) || 0;
+  let selectedBot = selectedKey.startsWith('bot_') ? pvpBots.find(bot => bot.id === selectedKey) : null;
+  let opponent = selectedBot || (selectedId ? (candidates || []).find(candidate => Number(candidate.telegram_id) === selectedId) : [...(candidates || [])].sort((a, b) => Math.abs(Number(a.level) - Number(player.level)) - Math.abs(Number(b.level) - Number(player.level)))[0]);
+  if (selectedKey && !opponent) throw new Error('Opponent is unavailable');
   let opponentInventory = [];
-  if (opponent) opponentInventory = await supabase('inventory', { query: `?player_id=eq.${Number(opponent.telegram_id)}&count=gt.0&select=item_id,count` });
-  else opponent = { telegram_id: 0, display_name: 'ShadowKing', photo_url: '', level: Math.max(1, Number(player.level)), equipped_id: 'sword', upgrades: { luck: 1, xp: 1, itemLevels: { sword: 3 } } }, opponentInventory = [{ item_id: 'sword', count: 1 }];
+  if (selectedBot) {
+    opponentInventory = [{ item_id: selectedBot.equipped_id, count: 1 }];
+  } else if (opponent) {
+    opponentInventory = await supabase('inventory', { query: `?player_id=eq.${Number(opponent.telegram_id)}&count=gt.0&select=item_id,count` });
+  } else {
+    selectedBot = pvpBots[0];
+    opponent = selectedBot;
+    opponentInventory = [{ item_id: selectedBot.equipped_id, count: 1 }];
+  }
   const rival = calculateHeroStats(opponent, opponentInventory || []);
+  if (selectedBot) rival.power = Math.round(hero.power * selectedBot.powerScale);
   const enemy = { id: `pvp_${opponent.telegram_id}`, name: opponent.display_name || 'Соперник', type: 'assassin', power: rival.power, reward: [700, 1800], xp: 120 };
   const battle = createBattleState(hero, enemy, inventory || [], 'pvp');
-  Object.assign(battle, { opponentId: String(opponent.telegram_id), opponentLevel: Number(opponent.level) || 1, opponentEquipment: opponent.equipped_id || '', opponentPhoto: opponent.photo_url || '', opponentOnline: Date.now() - new Date(opponent.last_seen || 0).getTime() < 120000 });
+  Object.assign(battle, { opponentId: selectedBot?.id || String(opponent.telegram_id), opponentLevel: Number(opponent.level) || 1, opponentEquipment: opponent.equipped_id || '', opponentPhoto: opponent.photo_url || '', opponentOnline: selectedBot ? false : Date.now() - new Date(opponent.last_seen || 0).getTime() < 120000, training: Boolean(selectedBot) });
   const upgrades = player.upgrades && typeof player.upgrades === 'object' ? player.upgrades : {};
   const updated = await supabase('players', { method: 'PATCH', query: `?telegram_id=eq.${uid}&balance=eq.${Number(player.balance) || 0}&xp=eq.${Number(player.xp) || 0}`, body: { upgrades: { ...upgrades, battle } } });
   if (!updated?.length) throw new Error('Profile changed, try again');

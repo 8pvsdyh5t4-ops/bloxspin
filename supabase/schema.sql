@@ -349,6 +349,13 @@ revoke all on function bootstrap_player(jsonb,text,boolean) from public, anon, a
 revoke all on function game_action(bigint,text,jsonb,boolean) from public, anon, authenticated;
 revoke all on function admin_action(jsonb,text,jsonb) from public, anon, authenticated;
 
+grant usage on schema public to service_role;
+grant all privileges on all tables in schema public to service_role;
+grant all privileges on all sequences in schema public to service_role;
+alter default privileges in schema public grant all privileges on tables to service_role;
+alter default privileges in schema public grant all privileges on sequences to service_role;
+
+grant execute on function player_snapshot(bigint) to service_role;
 grant execute on function bootstrap_player(jsonb,text,boolean) to service_role;
 grant execute on function game_action(bigint,text,jsonb,boolean) to service_role;
 grant execute on function admin_action(jsonb,text,jsonb) to service_role;
