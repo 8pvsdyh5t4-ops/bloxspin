@@ -1,5 +1,5 @@
 /* Roadmap 25-28: auras, equipment sets, evolution and shop. */
-.item-hub-tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:0 12px 12px;padding:5px;border:1px solid #ffffff12;border-radius:15px;background:#0b0f1b}
+.item-hub-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:0 12px 12px;padding:5px;border:1px solid #ffffff12;border-radius:15px;background:#0b0f1b}
 .item-hub-tabs button{height:38px;border:0;border-radius:11px;color:#7f899f;background:transparent;font-size:9px;font-weight:950;letter-spacing:.08em}
 .item-hub-tabs button.active{color:#fff;background:linear-gradient(135deg,#704eff,#bd48f6);box-shadow:0 7px 18px #7d4cff38}
 .item-hub-panel[hidden]{display:none}

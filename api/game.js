@@ -206,6 +206,7 @@ async function pveFight(user, payload) {
     body: { balance: balance + reward, xp: xp + xpReward, upgrades: nextUpgrades }
   });
   if (!updated?.length) throw new Error('Profile changed, try again');
+  if (victory) await rpc('increment_daily_progress', { p_id: uid, p_field: 'bot_wins', p_amount: 1 });
   await rpc('apply_player_levels', { p_id: uid });
   const snapshot = await rpc('player_snapshot', { p_id: uid });
   snapshot.event = { enemy_id: enemyId, victory, hero_power: heroPower, enemy_power: enemy.power, reward, xp: xpReward };
@@ -359,7 +360,7 @@ async function battleTurn(user, payload) {
   const uid = Number(user.id);
   const move = String(payload.move || 'attack');
   if (!['attack', 'skill', 'pet', 'aura'].includes(move)) throw new Error('Invalid battle move');
-  const players = await supabase('players', { query: `?telegram_id=eq.${uid}&select=balance,level,xp,upgrades,blocked` });
+  const players = await supabase('players', { query: `?telegram_id=eq.${uid}&select=balance,crystals,level,xp,upgrades,blocked` });
   const player = players?.[0];
   if (!player) throw new Error('Player not found');
   if (player.blocked) throw new Error('Account is blocked');
@@ -414,6 +415,7 @@ async function battleTurn(user, payload) {
   const xp = Number(player.xp) || 0;
   let reward = 0;
   let xpReward = 0;
+  let crystalReward = 0;
   let drop = '';
   let nextUpgrades = { ...upgrades, battle };
   if (victory || defeat) {
@@ -434,12 +436,13 @@ async function battleTurn(user, payload) {
       const bosses = upgrades.bosses && typeof upgrades.bosses === 'object' ? upgrades.bosses : {};
       nextUpgrades.bosses = { wins: (Number(bosses.wins) || 0) + (victory ? 1 : 0), seasonalWins: (Number(bosses.seasonalWins) || 0) + (victory && battle.seasonal ? 1 : 0), lastBoss: battle.enemyId };
       if (victory && battle.dropId && crypto.randomInt(100) < Number(battle.dropChance || 0)) drop = battle.dropId;
+      crystalReward = victory ? (battle.seasonal ? 5 : 2) : 0;
     }
   }
   const updated = await supabase('players', {
     method: 'PATCH',
-    query: `?telegram_id=eq.${uid}&balance=eq.${balance}&xp=eq.${xp}`,
-    body: { balance: balance + reward, xp: xp + xpReward, upgrades: nextUpgrades }
+    query: `?telegram_id=eq.${uid}&balance=eq.${balance}&crystals=eq.${Number(player.crystals || 0)}&xp=eq.${xp}`,
+    body: { balance: balance + reward, crystals: Number(player.crystals || 0) + crystalReward, xp: xp + xpReward, upgrades: nextUpgrades }
   });
   if (!updated?.length) throw new Error('Profile changed, try again');
   if (drop) {
@@ -447,9 +450,10 @@ async function battleTurn(user, payload) {
     const count = Number(rows?.[0]?.count) || 0;
     await supabase('inventory', { method: 'POST', query: '?on_conflict=player_id,item_id', prefer: 'resolution=merge-duplicates,return=representation', body: { player_id: uid, item_id: drop, count: count + 1, discovered: true } }).catch(() => { drop = ''; });
   }
+  if (victory) await rpc('increment_daily_progress', { p_id: uid, p_field: battle.mode === 'tower' ? 'tower_floors' : battle.mode === 'pvp' ? 'pvp_wins' : 'bot_wins', p_amount: 1 });
   if (victory || defeat) await rpc('apply_player_levels', { p_id: uid });
   const snapshot = await rpc('player_snapshot', { p_id: uid });
-  snapshot.event = { status: victory ? 'victory' : defeat ? 'defeat' : 'active', battle: victory || defeat ? null : battle, finishedBattle: victory || defeat ? battle : null, log, reward, xp: xpReward, drop };
+  snapshot.event = { status: victory ? 'victory' : defeat ? 'defeat' : 'active', battle: victory || defeat ? null : battle, finishedBattle: victory || defeat ? battle : null, log, reward, xp: xpReward, crystals: crystalReward, drop };
   return snapshot;
 }
 
@@ -473,6 +477,7 @@ async function updateOnlinePvpPlayer(playerId, victory, reward) {
   const pvp = { ...old, matches: (Number(old.matches) || 0) + 1, wins: (Number(old.wins) || 0) + (victory ? 1 : 0), losses: (Number(old.losses) || 0) + (victory ? 0 : 1), streak: victory ? (Number(old.streak) || 0) + 1 : 0, bestStreak: Math.max(Number(old.bestStreak) || 0, victory ? (Number(old.streak) || 0) + 1 : 0), rating, league: pvpLeague(rating).id };
   await supabase('players', { method: 'PATCH', query: `?telegram_id=eq.${playerId}&balance=eq.${Number(player.balance) || 0}&xp=eq.${Number(player.xp) || 0}`, body: { balance: Number(player.balance) + reward, xp: Number(player.xp) + (victory ? 160 : 45), upgrades: { ...upgrades, pvp } } });
   await rpc('apply_player_levels', { p_id: playerId });
+  if (victory) await rpc('increment_daily_progress', { p_id: playerId, p_field: 'pvp_wins', p_amount: 1 });
   return ratingChange;
 }
 
@@ -666,6 +671,7 @@ async function upgradeItem(user, payload) {
     }).catch(() => {});
     throw new Error('Profile changed, try again');
   }
+  await rpc('increment_daily_progress', { p_id: uid, p_field: 'item_upgrades', p_amount: 1 });
   return rpc('player_snapshot', { p_id: uid });
 }
 
@@ -821,14 +827,213 @@ async function economyStatus(user) {
   return attachEconomy(await rpc('player_snapshot', { p_id: uid }), uid);
 }
 
+const weekKey = () => {
+  const now = new Date();
+  const first = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+  return `${now.getUTCFullYear()}-W${String(Math.ceil((((now - first) / 86400000) + first.getUTCDay() + 1) / 7)).padStart(2, '0')}`;
+};
+const seasonKey = () => new Date().toISOString().slice(0, 7);
+
+async function marketState(user) {
+  const uid = Number(user.id);
+  const [active, history] = await Promise.all([
+    supabase('market_listings', { query: '?status=eq.active&select=id,seller_id,item_id,price,status,created_at&order=created_at.desc&limit=40' }),
+    supabase('market_listings', { query: `?or=(seller_id.eq.${uid},buyer_id.eq.${uid})&status=neq.active&select=id,seller_id,buyer_id,item_id,price,fee,status,created_at,sold_at&order=created_at.desc&limit=20` })
+  ]);
+  const ids = [...new Set([...(active || []).map(x => x.seller_id), ...(history || []).flatMap(x => [x.seller_id, x.buyer_id]).filter(Boolean)])];
+  const names = {};
+  if (ids.length) {
+    const people = await supabase('players', { query: `?telegram_id=in.(${ids.join(',')})&select=telegram_id,display_name,level` });
+    for (const person of people || []) names[String(person.telegram_id)] = { name: person.display_name, level: person.level };
+  }
+  return { active: (active || []).map(x => ({ ...x, seller: names[String(x.seller_id)] || { name: 'Игрок', level: 1 }, mine: Number(x.seller_id) === uid })), history: history || [], feePercent: 10, maxActive: 5 };
+}
+
+async function marketAction(user, action, payload) {
+  const uid = Number(user.id);
+  if (action !== 'state') await rpc('market_trade', { p_player_id: uid, p_action: action, p_payload: payload || {} });
+  const snapshot = await rpc('player_snapshot', { p_id: uid });
+  snapshot.market = await marketState(user);
+  snapshot.event = { action: `market_${action}` };
+  return snapshot;
+}
+
+async function clanMembership(uid) {
+  const rows = await supabase('clan_members', { query: `?player_id=eq.${uid}&select=clan_id,role,contribution,joined_at&limit=1` });
+  return rows?.[0] || null;
+}
+
+async function ensureClanRaid(clan) {
+  const key = weekKey();
+  const rows = await supabase('clan_raids', { query: `?clan_id=eq.${clan.id}&week_key=eq.${encodeURIComponent(key)}&select=*&limit=1` });
+  if (rows?.[0]) return rows[0];
+  const hp = 350000 + Number(clan.level || 1) * 150000;
+  const created = await supabase('clan_raids', { method: 'POST', body: { clan_id: clan.id, week_key: key, max_hp: hp, current_hp: hp, reward_crystals: 40 + Number(clan.level || 1) * 10 } });
+  return created?.[0];
+}
+
+async function ensureClanWar(clan) {
+  const active = await supabase('clan_wars', { query: `?or=(clan_one.eq.${clan.id},clan_two.eq.${clan.id})&status=eq.active&select=*&order=starts_at.desc&limit=1` });
+  if (active?.[0]) return active[0];
+  const rivals = await supabase('clans', { query: `?id=neq.${clan.id}&select=id,name,emblem,level&order=season_points.desc&limit=1` });
+  if (!rivals?.[0]) return null;
+  const made = await supabase('clan_wars', { method: 'POST', body: { season_key: seasonKey(), clan_one: clan.id, clan_two: rivals[0].id } }).catch(() => null);
+  return made?.[0] || null;
+}
+
+async function clanState(user) {
+  const uid = Number(user.id);
+  const membership = await clanMembership(uid);
+  const publicClans = await supabase('clans', { query: '?select=id,name,emblem,level,xp,season_points&order=season_points.desc&limit=20' });
+  if (!membership) return { membership: null, clans: publicClans || [], leaderboard: publicClans || [] };
+  const clanRows = await supabase('clans', { query: `?id=eq.${membership.clan_id}&select=*&limit=1` });
+  const clan = clanRows?.[0];
+  if (!clan) return { membership: null, clans: publicClans || [] };
+  const [members, raid, war] = await Promise.all([
+    supabase('clan_members', { query: `?clan_id=eq.${clan.id}&select=player_id,role,contribution,joined_at&order=contribution.desc&limit=30` }),
+    ensureClanRaid(clan), ensureClanWar(clan)
+  ]);
+  const ids = (members || []).map(x => x.player_id);
+  const people = ids.length ? await supabase('players', { query: `?telegram_id=in.(${ids.join(',')})&select=telegram_id,display_name,level` }) : [];
+  const names = Object.fromEntries((people || []).map(x => [String(x.telegram_id), x]));
+  let raidAttacks = [], myRaidAttacks = 0, raidDamage = 0, raidClaimed = false;
+  if (raid) {
+    raidAttacks = await supabase('clan_raid_attacks', { query: `?raid_id=eq.${raid.id}&select=player_id,damage,created_at&limit=1000` });
+    const today = new Date().toISOString().slice(0, 10);
+    myRaidAttacks = (raidAttacks || []).filter(x => Number(x.player_id) === uid && String(x.created_at).startsWith(today)).length;
+    raidDamage = (raidAttacks || []).filter(x => Number(x.player_id) === uid).reduce((sum, x) => sum + Number(x.damage || 0), 0);
+    const claims = await supabase('mission_claims', { query: `?player_id=eq.${uid}&period=eq.${encodeURIComponent(raid.week_key)}&mission_id=eq.${encodeURIComponent(`clan_raid_${raid.id}`)}&select=mission_id` });
+    raidClaimed = Boolean(claims?.length);
+  }
+  let warView = null;
+  if (war) {
+    const opponentId = war.clan_one === clan.id ? war.clan_two : war.clan_one;
+    const opponent = (publicClans || []).find(x => x.id === opponentId) || (await supabase('clans', { query: `?id=eq.${opponentId}&select=id,name,emblem,level&limit=1` }))?.[0];
+    const today = new Date().toISOString().slice(0, 10);
+    const attacks = await supabase('clan_war_attacks', { query: `?war_id=eq.${war.id}&player_id=eq.${uid}&created_at=gte.${encodeURIComponent(today + 'T00:00:00Z')}&select=id` });
+    warView = { ...war, opponent, mine: war.clan_one === clan.id ? Number(war.points_one) : Number(war.points_two), theirs: war.clan_one === clan.id ? Number(war.points_two) : Number(war.points_one), attacksToday: attacks?.length || 0 };
+  }
+  return { membership, clan, members: (members || []).map(x => ({ ...x, player: names[String(x.player_id)] || { display_name: 'Игрок', level: 1 } })), raid: raid ? { ...raid, myAttacksToday: myRaidAttacks, myDamage: raidDamage, claimed: raidClaimed } : null, war: warView, clans: publicClans || [], leaderboard: publicClans || [] };
+}
+
+async function clanAction(user, action, payload = {}) {
+  const uid = Number(user.id);
+  const membership = await clanMembership(uid);
+  if (action === 'create') {
+    if (membership) throw new Error('Ты уже состоишь в клане');
+    const name = String(payload.name || '').trim();
+    const emblem = ['crown','shield','sword','fire','galaxy','gem'].includes(payload.emblem) ? payload.emblem : 'crown';
+    if (!/^[\p{L}\p{N} _-]{3,18}$/u.test(name)) throw new Error('Название: 3–18 букв или цифр');
+    const players = await supabase('players', { query: `?telegram_id=eq.${uid}&select=balance,level` });
+    if (Number(players?.[0]?.level) < 3) throw new Error('Кланы открываются с 3 уровня');
+    if (Number(players?.[0]?.balance) < 25000) throw new Error('Для создания нужно 25 000 Coins');
+    const made = await supabase('clans', { method: 'POST', body: { name, emblem, owner_id: uid } });
+    try {
+      await supabase('clan_members', { method: 'POST', body: { clan_id: made[0].id, player_id: uid, role: 'owner' } });
+      const paid = await supabase('players', { method: 'PATCH', query: `?telegram_id=eq.${uid}&balance=eq.${Number(players[0].balance)}`, body: { balance: Number(players[0].balance) - 25000 } });
+      if (!paid?.length) throw new Error('Профиль изменился, повтори создание');
+    } catch (error) { await supabase('clans', { method: 'DELETE', query: `?id=eq.${made[0].id}` }).catch(() => {}); throw error; }
+  } else if (action === 'join') {
+    if (membership) throw new Error('Ты уже состоишь в клане');
+    const clanId = String(payload.clan_id || '');
+    const count = await supabase('clan_members', { query: `?clan_id=eq.${clanId}&select=player_id` });
+    if ((count || []).length >= 30) throw new Error('В клане уже 30 участников');
+    await supabase('clan_members', { method: 'POST', body: { clan_id: clanId, player_id: uid, role: 'member' } });
+  } else if (action === 'leave') {
+    if (!membership) throw new Error('Ты не состоишь в клане');
+    if (membership.role === 'owner') {
+      const members = await supabase('clan_members', { query: `?clan_id=eq.${membership.clan_id}&select=player_id` });
+      if ((members || []).length > 1) throw new Error('Сначала передай роль владельца');
+      await supabase('clans', { method: 'DELETE', query: `?id=eq.${membership.clan_id}` });
+    } else await supabase('clan_members', { method: 'DELETE', query: `?player_id=eq.${uid}` });
+  } else if (action === 'contribute') {
+    if (!membership) throw new Error('Ты не состоишь в клане');
+    const amount = Math.max(1000, Math.min(50000, Number(payload.amount) || 0));
+    const players = await supabase('players', { query: `?telegram_id=eq.${uid}&select=balance` });
+    if (Number(players?.[0]?.balance) < amount) throw new Error('Недостаточно Blox Coins');
+    const clans = await supabase('clans', { query: `?id=eq.${membership.clan_id}&select=xp` });
+    const xp = Number(clans?.[0]?.xp || 0) + amount;
+    await supabase('players', { method: 'PATCH', query: `?telegram_id=eq.${uid}&balance=eq.${Number(players[0].balance)}`, body: { balance: Number(players[0].balance) - amount } });
+    await Promise.all([
+      supabase('clans', { method: 'PATCH', query: `?id=eq.${membership.clan_id}`, body: { xp, level: Math.min(20, 1 + Math.floor(xp / 100000)) } }),
+      supabase('clan_members', { method: 'PATCH', query: `?player_id=eq.${uid}`, body: { contribution: Number(membership.contribution || 0) + amount } })
+    ]);
+  } else if (action === 'role') {
+    if (!membership || membership.role !== 'owner') throw new Error('Только владелец меняет роли');
+    const target = Number(payload.player_id);
+    if (!target || target === uid) throw new Error('Неверный участник');
+    if (payload.role === 'kick') await supabase('clan_members', { method: 'DELETE', query: `?player_id=eq.${target}&clan_id=eq.${membership.clan_id}` });
+    else if (['member','officer'].includes(payload.role)) await supabase('clan_members', { method: 'PATCH', query: `?player_id=eq.${target}&clan_id=eq.${membership.clan_id}`, body: { role: payload.role } });
+  } else if (action === 'raid_attack') {
+    if (!membership) throw new Error('Вступи в клан');
+    const state = await clanState(user), raid = state.raid;
+    if (!raid || raid.status !== 'active') throw new Error('Рейд уже завершён');
+    if (raid.myAttacksToday >= 3) throw new Error('Сегодня использованы 3 атаки');
+    const [players, inventory] = await Promise.all([supabase('players', { query: `?telegram_id=eq.${uid}&select=level,upgrades,equipped_id` }), supabase('inventory', { query: `?player_id=eq.${uid}&count=gt.0&select=item_id,count` })]);
+    const damage = Math.max(1000, Math.round(calculateHeroPower(players[0], inventory || []) * (0.8 + crypto.randomInt(41) / 100)));
+    const hp = Math.max(0, Number(raid.current_hp) - damage);
+    const updated = await supabase('clan_raids', { method: 'PATCH', query: `?id=eq.${raid.id}&current_hp=eq.${raid.current_hp}&status=eq.active`, body: { current_hp: hp, status: hp ? 'active' : 'defeated', defeated_at: hp ? null : new Date().toISOString() } });
+    if (!updated?.length) throw new Error('Босс уже получил урон, повтори атаку');
+    await supabase('clan_raid_attacks', { method: 'POST', body: { raid_id: raid.id, player_id: uid, damage } });
+  } else if (action === 'raid_claim') {
+    if (!membership) throw new Error('Вступи в клан');
+    const state = await clanState(user), raid = state.raid;
+    if (!raid || raid.status !== 'defeated' || !raid.myDamage) throw new Error('Награда пока недоступна');
+    if (raid.claimed) throw new Error('Награда уже получена');
+    const attacks = await supabase('clan_raid_attacks', { query: `?raid_id=eq.${raid.id}&select=damage` });
+    const total = (attacks || []).reduce((sum, x) => sum + Number(x.damage || 0), 0);
+    const reward = Math.max(2, Math.round(Number(raid.reward_crystals) * raid.myDamage / Math.max(1, total)));
+    const missionId = `clan_raid_${raid.id}`;
+    await supabase('mission_claims', { method: 'POST', body: { player_id: uid, period: raid.week_key, mission_id: missionId } });
+    const players = await supabase('players', { query: `?telegram_id=eq.${uid}&select=crystals` });
+    const granted = await supabase('players', { method: 'PATCH', query: `?telegram_id=eq.${uid}&crystals=eq.${Number(players[0].crystals)}`, body: { crystals: Number(players[0].crystals) + reward } });
+    if (!granted?.length) {
+      await supabase('mission_claims', { method: 'DELETE', query: `?player_id=eq.${uid}&period=eq.${encodeURIComponent(raid.week_key)}&mission_id=eq.${encodeURIComponent(missionId)}` }).catch(() => {});
+      throw new Error('Профиль изменился, повтори получение');
+    }
+  } else if (action === 'war_attack') {
+    if (!membership) throw new Error('Вступи в клан');
+    const state = await clanState(user), war = state.war;
+    if (!war) throw new Error('Ждём клан-соперник');
+    if (war.attacksToday >= 5) throw new Error('Сегодня использованы 5 боёв');
+    const won = crypto.randomInt(100) < 55;
+    const points = won ? 80 + crypto.randomInt(71) : 20 + crypto.randomInt(31);
+    const field = war.clan_one === membership.clan_id ? 'points_one' : 'points_two';
+    await supabase('clan_wars', { method: 'PATCH', query: `?id=eq.${war.id}`, body: { [field]: Number(war[field]) + points } });
+    await Promise.all([
+      supabase('clan_war_attacks', { method: 'POST', body: { war_id: war.id, clan_id: membership.clan_id, player_id: uid, points, won } }),
+      supabase('clans', { method: 'PATCH', query: `?id=eq.${membership.clan_id}`, body: { season_points: Number(state.clan.season_points || 0) + points } })
+    ]);
+  }
+  const snapshot = await rpc('player_snapshot', { p_id: uid });
+  snapshot.clan = await clanState(user);
+  snapshot.event = { action: `clan_${action}` };
+  return snapshot;
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'POST required' });
   try {
     const user = verifyTelegram(req.headers['x-telegram-init-data']);
     const body = await readBody(req);
     const action = String(body.action || 'bootstrap');
-    const allowed = new Set(['bootstrap', 'spin', 'pve_fight', 'battle_start', 'battle_turn', 'pvp_targets', 'pvp_match', 'pvp_online', 'pet_upgrade', 'claim_pvp_league', 'survivor_start', 'survivor_finish', 'claim_daily', 'claim_mission', 'buy_upgrade', 'upgrade_item', 'aura_upgrade', 'evolve_item', 'shop_buy', 'star_invoice', 'cosmetic_equip', 'economy_status', 'item_action', 'claim_achievement', 'claim_league', 'rescue', 'open_chest', 'claim_season', 'claim_weekly', 'redeem_promo', 'referral_info', 'tournament_join']);
+    const allowed = new Set(['bootstrap', 'spin', 'pve_fight', 'battle_start', 'battle_turn', 'pvp_targets', 'pvp_match', 'pvp_online', 'pet_upgrade', 'claim_pvp_league', 'survivor_start', 'survivor_finish', 'claim_daily', 'claim_mission', 'buy_upgrade', 'upgrade_item', 'aura_upgrade', 'evolve_item', 'shop_buy', 'star_invoice', 'cosmetic_equip', 'economy_status', 'item_action', 'claim_achievement', 'claim_league', 'rescue', 'open_chest', 'claim_season', 'claim_weekly', 'redeem_promo', 'referral_info', 'tournament_join', 'market_state', 'market_sell', 'market_buy', 'market_cancel', 'clan_state', 'clan_create', 'clan_join', 'clan_leave', 'clan_contribute', 'clan_role', 'clan_raid_attack', 'clan_raid_claim', 'clan_war_attack']);
     if (!allowed.has(action)) return json(res, 400, { ok: false, error: 'Unknown action' });
+    if (action.startsWith('market_')) {
+      const payload = await marketAction(user, action.slice(7), body.payload || {});
+      payload.bot_username = process.env.TELEGRAM_BOT_USERNAME || '';
+      return json(res, 200, { ok: true, data: payload });
+    }
+    if (action.startsWith('clan_')) {
+      const payload = await clanAction(user, action.slice(5), body.payload || {});
+      payload.bot_username = process.env.TELEGRAM_BOT_USERNAME || '';
+      return json(res, 200, { ok: true, data: payload });
+    }
+    if (action === 'claim_mission' && ['bots3','spins3','tower1','pvp1','upgrade1'].includes(String(body.payload?.id || ''))) {
+      const payload = await rpc('claim_daily_mission', { p_id: Number(user.id), p_mission: String(body.payload.id) });
+      payload.bot_username = process.env.TELEGRAM_BOT_USERNAME || '';
+      return json(res, 200, { ok: true, data: payload });
+    }
     if (action === 'upgrade_item') {
       const payload = await upgradeItem(user, body.payload || {});
       if (payload && typeof payload === 'object') payload.bot_username = process.env.TELEGRAM_BOT_USERNAME || '';
@@ -882,7 +1087,21 @@ module.exports = async function handler(req, res) {
       p_is_owner: isOwner(user)
     });
     if (action === 'spin') payload = await normalizeSpinDrop(user, payload);
-    if (action === 'bootstrap') await attachEconomy(payload, Number(user.id));
+    if (action === 'claim_achievement') {
+      const amounts = { firstSpin: 1, collector: 2, winner10: 3, spins25: 3, level5: 5, secret: 10 };
+      await rpc('grant_claim_crystals', { p_id: Number(user.id), p_kind: 'achievement', p_key: String(body.payload?.id || ''), p_amount: amounts[body.payload?.id] || 1 });
+      payload = await rpc('player_snapshot', { p_id: Number(user.id) });
+    }
+    if (action === 'claim_season') {
+      const level = Math.max(1, Math.min(50, Number(body.payload?.level) || 1));
+      await rpc('grant_claim_crystals', { p_id: Number(user.id), p_kind: 'season', p_key: `${seasonKey()}_${level}`, p_amount: level * 2 });
+      payload = await rpc('player_snapshot', { p_id: Number(user.id) });
+    }
+    if (action === 'bootstrap') {
+      await attachEconomy(payload, Number(user.id));
+      payload.market = await marketState(user).catch(() => ({ active: [], history: [], feePercent: 10, maxActive: 5 }));
+      payload.clan = await clanState(user).catch(() => ({ membership: null, clans: [], leaderboard: [] }));
+    }
     if (payload && typeof payload === 'object') payload.bot_username = process.env.TELEGRAM_BOT_USERNAME || '';
     return json(res, 200, { ok: true, data: payload });
   } catch (error) {
