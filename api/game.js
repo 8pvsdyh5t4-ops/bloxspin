@@ -17,6 +17,10 @@ const pveEnemies = {
   summoner: { name: 'Призыватель дронов', type: 'summoner', power: 8200, reward: [1300, 3000], xp: 150 },
   golem: { name: 'Инферно Голем', type: 'boss', power: 12000, reward: [2500, 10000], xp: 250 }
 };
+const bossEnemies = {
+  inferno: { id: 'inferno', name: 'Инферно Голем', type: 'boss', power: 12000, reward: [3000, 11000], xp: 300, phases: ['Каменная броня', 'Вулканическая ярость', 'Огненный апокалипсис'], dropChance: 22, dropId: 'crystal' },
+  seasonal: { id: 'seasonal', name: 'Кибер-Дракон', type: 'boss', power: 15500, reward: [5000, 16000], xp: 450, phases: ['Плазменный щит', 'Рой дронов', 'Квантовый шторм'], dropChance: 35, dropId: 'crown', seasonal: true }
+};
 const rollDropId = () => {
   const roll = crypto.randomInt(10000);
   if (roll < 6800) return 'block';
@@ -168,13 +172,18 @@ function createBattleState(hero, enemy, inventory, mode) {
     xpReward: enemy.xp,
     floor: enemy.floor || 0,
     isBoss: Boolean(enemy.isBoss),
-    isMiniBoss: Boolean(enemy.isMiniBoss)
+    isMiniBoss: Boolean(enemy.isMiniBoss),
+    phase: 1,
+    phases: enemy.phases || [],
+    dropChance: Number(enemy.dropChance) || 0,
+    dropId: enemy.dropId || '',
+    seasonal: Boolean(enemy.seasonal)
   };
 }
 
 async function battleStart(user, payload) {
   const uid = Number(user.id);
-  const mode = payload.mode === 'tower' ? 'tower' : 'pve';
+  const mode = ['tower', 'boss'].includes(payload.mode) ? payload.mode : 'pve';
   const [players, inventory] = await Promise.all([
     supabase('players', { query: `?telegram_id=eq.${uid}&select=balance,level,xp,equipped_id,upgrades,blocked` }),
     supabase('inventory', { query: `?player_id=eq.${uid}&count=gt.0&select=item_id,count` })
@@ -185,7 +194,7 @@ async function battleStart(user, payload) {
   const upgrades = player.upgrades && typeof player.upgrades === 'object' ? player.upgrades : {};
   const tower = upgrades.tower && typeof upgrades.tower === 'object' ? upgrades.tower : { floor: 1, best: 0, wins: 0 };
   const enemyId = String(payload.enemy_id || '');
-  const enemy = mode === 'tower' ? towerEnemy(Math.max(1, Number(tower.floor) || 1)) : pveEnemies[enemyId] ? { ...pveEnemies[enemyId], id: enemyId } : null;
+  const enemy = mode === 'tower' ? towerEnemy(Math.max(1, Number(tower.floor) || 1)) : mode === 'boss' ? bossEnemies[enemyId] : pveEnemies[enemyId] ? { ...pveEnemies[enemyId], id: enemyId } : null;
   if (!enemy) throw new Error('Invalid battle enemy');
   const battle = createBattleState(calculateHeroStats(player, inventory || []), enemy, inventory || [], mode);
   const updated = await supabase('players', {
@@ -228,6 +237,14 @@ async function battleTurn(user, payload) {
     battle.enemyHp = Math.max(0, Number(battle.enemyHp) - damage);
     log.push(`${crit ? 'Критический удар' : 'Твой удар'}: −${damage} HP`);
   }
+  if (battle.phases?.length && battle.enemyHp > 0) {
+    const ratio = battle.enemyHp / battle.maxEnemyHp;
+    const phase = ratio <= 0.33 ? 3 : ratio <= 0.66 ? 2 : 1;
+    if (phase > Number(battle.phase || 1)) {
+      battle.phase = phase;
+      log.push(`Фаза ${phase}: ${battle.phases[phase - 1]}`);
+    }
+  }
   if (battle.enemyHp > 0) {
     let enemyMultiplier = 1;
     let defenseFactor = 0.35;
@@ -236,7 +253,7 @@ async function battleTurn(user, payload) {
     if (battle.enemyType === 'assassin' && enemyCrit) { enemyMultiplier = 1.8; log.push('Ассасин наносит удар из тени'); }
     if (battle.enemyType === 'mage' && battle.turn % 3 === 0) { enemyMultiplier = 1.55; defenseFactor = 0.14; log.push('Маг выпускает Взрыв Пустоты'); }
     if (battle.enemyType === 'summoner' && battle.turn % 3 === 0) { enemyMultiplier = 1.35; log.push('Призыватель вызывает боевых дронов'); }
-    if (battle.enemyType === 'boss' && (battle.turn % 4 === 0 || battle.enemyHp < battle.maxEnemyHp / 2)) { enemyMultiplier = 1.7; defenseFactor = 0.2; log.push('Босс обрушивает Огненный метеор'); }
+    if (battle.enemyType === 'boss' && (battle.turn % 4 === 0 || Number(battle.phase) > 1)) { enemyMultiplier = 1.35 + Number(battle.phase || 1) * 0.22; defenseFactor = 0.2; log.push(`Босс применяет: ${battle.phases?.[Number(battle.phase || 1) - 1] || 'Огненный метеор'}`); }
     let enemyDamage = randomDamage(Math.max(Number(battle.enemyStats.attack) * 0.25, Number(battle.enemyStats.attack) * enemyMultiplier - Number(battle.heroStats.defense) * defenseFactor));
     if (battle.auraShield) { enemyDamage = Math.max(1, Math.round(enemyDamage * (1 - battle.auraShield))); battle.auraShield = 0; log.push('Аура смягчает удар'); }
     battle.heroHp = Math.max(0, Number(battle.heroHp) - enemyDamage);
@@ -252,6 +269,7 @@ async function battleTurn(user, payload) {
   const xp = Number(player.xp) || 0;
   let reward = 0;
   let xpReward = 0;
+  let drop = '';
   let nextUpgrades = { ...upgrades, battle };
   if (victory || defeat) {
     const pve = upgrades.pve && typeof upgrades.pve === 'object' ? upgrades.pve : {};
@@ -262,6 +280,11 @@ async function battleTurn(user, payload) {
     delete nextUpgrades.battle;
     if (battle.mode === 'tower') nextUpgrades.tower = { floor: victory ? Number(battle.floor) + 1 : Number(battle.floor), best: Math.max(Number(tower.best) || 0, victory ? Number(battle.floor) : 0), wins: (Number(tower.wins) || 0) + (victory ? 1 : 0) };
     else nextUpgrades.pve = { battles: (Number(pve.battles) || 0) + 1, wins: (Number(pve.wins) || 0) + (victory ? 1 : 0), lastEnemy: battle.enemyId };
+    if (battle.mode === 'boss') {
+      const bosses = upgrades.bosses && typeof upgrades.bosses === 'object' ? upgrades.bosses : {};
+      nextUpgrades.bosses = { wins: (Number(bosses.wins) || 0) + (victory ? 1 : 0), seasonalWins: (Number(bosses.seasonalWins) || 0) + (victory && battle.seasonal ? 1 : 0), lastBoss: battle.enemyId };
+      if (victory && battle.dropId && crypto.randomInt(100) < Number(battle.dropChance || 0)) drop = battle.dropId;
+    }
   }
   const updated = await supabase('players', {
     method: 'PATCH',
@@ -269,9 +292,48 @@ async function battleTurn(user, payload) {
     body: { balance: balance + reward, xp: xp + xpReward, upgrades: nextUpgrades }
   });
   if (!updated?.length) throw new Error('Profile changed, try again');
+  if (drop) {
+    const rows = await supabase('inventory', { query: `?player_id=eq.${uid}&item_id=eq.${encodeURIComponent(drop)}&select=count` });
+    const count = Number(rows?.[0]?.count) || 0;
+    await supabase('inventory', { method: 'POST', query: '?on_conflict=player_id,item_id', prefer: 'resolution=merge-duplicates,return=representation', body: { player_id: uid, item_id: drop, count: count + 1, discovered: true } }).catch(() => { drop = ''; });
+  }
   if (victory || defeat) await rpc('apply_player_levels', { p_id: uid });
   const snapshot = await rpc('player_snapshot', { p_id: uid });
-  snapshot.event = { status: victory ? 'victory' : defeat ? 'defeat' : 'active', battle: victory || defeat ? null : battle, finishedBattle: victory || defeat ? battle : null, log, reward, xp: xpReward };
+  snapshot.event = { status: victory ? 'victory' : defeat ? 'defeat' : 'active', battle: victory || defeat ? null : battle, finishedBattle: victory || defeat ? battle : null, log, reward, xp: xpReward, drop };
+  return snapshot;
+}
+
+async function survivorAction(user, payload, finish = false) {
+  const uid = Number(user.id);
+  const players = await supabase('players', { query: `?telegram_id=eq.${uid}&select=balance,xp,upgrades,blocked` });
+  const player = players?.[0];
+  if (!player) throw new Error('Player not found');
+  if (player.blocked) throw new Error('Account is blocked');
+  const upgrades = player.upgrades && typeof player.upgrades === 'object' ? player.upgrades : {};
+  if (!finish) {
+    const survivorSession = { startedAt: Date.now(), nonce: crypto.randomBytes(8).toString('hex') };
+    const updated = await supabase('players', { method: 'PATCH', query: `?telegram_id=eq.${uid}&balance=eq.${Number(player.balance) || 0}`, body: { upgrades: { ...upgrades, survivorSession } } });
+    if (!updated?.length) throw new Error('Profile changed, try again');
+    const snapshot = await rpc('player_snapshot', { p_id: uid });
+    snapshot.event = { status: 'started', nonce: survivorSession.nonce };
+    return snapshot;
+  }
+  const session = upgrades.survivorSession;
+  if (!session?.startedAt || session.nonce !== String(payload.nonce || '')) throw new Error('Survivor session is missing');
+  const elapsed = Math.max(1, Math.min(180, Math.floor((Date.now() - Number(session.startedAt)) / 1000)));
+  const seconds = Math.max(1, Math.min(elapsed + 3, Number(payload.seconds) || 1));
+  const wave = Math.max(1, Math.min(Math.floor(seconds / 12) + 1, Number(payload.wave) || 1));
+  const kills = Math.max(0, Math.min(wave * 14, Number(payload.kills) || 0));
+  const reward = Math.floor(seconds * 4 + kills * 8 + wave * 75);
+  const xpReward = Math.floor(seconds / 2 + wave * 12);
+  const old = upgrades.survivor && typeof upgrades.survivor === 'object' ? upgrades.survivor : {};
+  const nextUpgrades = { ...upgrades, survivor: { runs: (Number(old.runs) || 0) + 1, bestWave: Math.max(Number(old.bestWave) || 0, wave), bestTime: Math.max(Number(old.bestTime) || 0, seconds), totalKills: (Number(old.totalKills) || 0) + kills } };
+  delete nextUpgrades.survivorSession;
+  const updated = await supabase('players', { method: 'PATCH', query: `?telegram_id=eq.${uid}&balance=eq.${Number(player.balance) || 0}&xp=eq.${Number(player.xp) || 0}`, body: { balance: Number(player.balance) + reward, xp: Number(player.xp) + xpReward, upgrades: nextUpgrades } });
+  if (!updated?.length) throw new Error('Profile changed, try again');
+  await rpc('apply_player_levels', { p_id: uid });
+  const snapshot = await rpc('player_snapshot', { p_id: uid });
+  snapshot.event = { status: 'finished', seconds, wave, kills, reward, xp: xpReward };
   return snapshot;
 }
 
@@ -326,7 +388,7 @@ module.exports = async function handler(req, res) {
     const user = verifyTelegram(req.headers['x-telegram-init-data']);
     const body = await readBody(req);
     const action = String(body.action || 'bootstrap');
-    const allowed = new Set(['bootstrap', 'spin', 'pve_fight', 'battle_start', 'battle_turn', 'claim_daily', 'claim_mission', 'buy_upgrade', 'upgrade_item', 'item_action', 'claim_achievement', 'claim_league', 'rescue', 'open_chest', 'claim_season', 'claim_weekly', 'redeem_promo', 'referral_info', 'tournament_join']);
+    const allowed = new Set(['bootstrap', 'spin', 'pve_fight', 'battle_start', 'battle_turn', 'survivor_start', 'survivor_finish', 'claim_daily', 'claim_mission', 'buy_upgrade', 'upgrade_item', 'item_action', 'claim_achievement', 'claim_league', 'rescue', 'open_chest', 'claim_season', 'claim_weekly', 'redeem_promo', 'referral_info', 'tournament_join']);
     if (!allowed.has(action)) return json(res, 400, { ok: false, error: 'Unknown action' });
     if (action === 'upgrade_item') {
       const payload = await upgradeItem(user, body.payload || {});
@@ -340,6 +402,11 @@ module.exports = async function handler(req, res) {
     }
     if (action === 'battle_start' || action === 'battle_turn') {
       const payload = action === 'battle_start' ? await battleStart(user, body.payload || {}) : await battleTurn(user, body.payload || {});
+      if (payload && typeof payload === 'object') payload.bot_username = process.env.TELEGRAM_BOT_USERNAME || '';
+      return json(res, 200, { ok: true, data: payload });
+    }
+    if (action === 'survivor_start' || action === 'survivor_finish') {
+      const payload = await survivorAction(user, body.payload || {}, action === 'survivor_finish');
       if (payload && typeof payload === 'object') payload.bot_username = process.env.TELEGRAM_BOT_USERNAME || '';
       return json(res, 200, { ok: true, data: payload });
     }
