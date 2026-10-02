@@ -19,6 +19,8 @@ The Spin page uses the BloxSpin machine with block items instead of fruit symbol
 
 The PvE page offers five bot classes with distinct combat abilities and a server-authoritative turn-based battle system. Dedicated raid bosses use three health phases, escalating abilities, seasonal encounters and rare item drops. Survivor Mode adds real-time movement, automatic attacks, timed waves, run XP and one-of-three upgrade choices including Damage, Attack Speed, Double Shot, Orbiting Cube, Fire Aura, Critical Chance, pets and skill evolutions. PvP matchmaking shows the opponent profile, equipment and Power before a server-authoritative turn-based fight, then saves wins, losses and streaks. Asynchronous PvP lists real player profiles with activity status and lets the attacker fight a saved build while its owner is offline. If fewer than three players are available, the arena adds balanced training rivals so a new player can fight immediately. The Vercel API validates and saves combat rewards, boss progress and Survivor records.
 
+Online PvP adds a live matchmaking queue, synchronized alternating turns and a shared result for both players. PvP rating advances through Bronze, Silver, Gold, Diamond, Master and Legend with monthly rewards. Players on a win streak carry a visible Bounty that is paid to the winner. Dragon Pet now has ten separate levels, evolving rarity, an increasing combat ability and a dedicated hero card.
+
 ## Setup
 
 1. Create a Supabase project and run `supabase/schema.sql` in its SQL editor.

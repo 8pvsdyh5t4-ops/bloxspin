@@ -26,6 +26,23 @@ const pvpBots = [
   { id: 'bot_cyber', telegram_id: 0, display_name: 'CyberNinja', photo_url: '', level: 12, equipped_id: 'crystal', upgrades: { luck: 2, xp: 2, itemLevels: { crystal: 2 } }, powerScale: 1.02 },
   { id: 'bot_master', telegram_id: 0, display_name: 'BloxMaster', photo_url: '', level: 16, equipped_id: 'crown', upgrades: { luck: 3, xp: 2, itemLevels: { crown: 3 } }, powerScale: 1.14 }
 ];
+const pvpLeagues = [
+  { id: 'Bronze', min: 0, reward: 500 }, { id: 'Silver', min: 1100, reward: 1200 },
+  { id: 'Gold', min: 1300, reward: 2500 }, { id: 'Diamond', min: 1500, reward: 5000 },
+  { id: 'Master', min: 1750, reward: 9000 }, { id: 'Legend', min: 2100, reward: 16000 }
+];
+const pvpLeague = rating => [...pvpLeagues].reverse().find(tier => Number(rating) >= tier.min) || pvpLeagues[0];
+const pvpRating = upgrades => Math.max(0, Number(upgrades?.pvp?.rating) || 1000);
+const pvpBounty = upgrades => {
+  const streak = Math.max(0, Number(upgrades?.pvp?.streak) || 0);
+  return streak >= 3 ? Math.min(5000, streak * 500) : 0;
+};
+function petProfile(upgrades, inventory) {
+  const owned = inventory.some(row => row.item_id === 'pet' && Number(row.count) > 0);
+  const level = owned ? Math.max(1, Math.min(10, Number(upgrades?.pet?.level) || Number(upgrades?.itemLevels?.pet) || 1)) : 0;
+  const rarity = level >= 10 ? 'Secret' : level >= 7 ? 'Legendary' : level >= 4 ? 'Mythic' : 'Epic';
+  return { owned, level, rarity, ability: 'Плазменный укус', damageBonus: level ? 12 + level * 6 : 0, attack: level * 35, speed: level * 2 };
+}
 const rollDropId = () => {
   const roll = crypto.randomInt(10000);
   if (roll < 6800) return 'block';
@@ -84,15 +101,16 @@ function calculateHeroStats(player, inventory) {
   const bonus = Object.fromEntries(Object.entries(equipped?.stats || {}).map(([key, value]) => [key, Math.round(value * scale)]));
   const luck = Number(upgrades.luck) || 0;
   const xpBoost = Number(upgrades.xp) || 0;
+  const pet = petProfile(upgrades, inventory);
   const hp = 1200 + (level - 1) * 200 + owned * 40 + (bonus.hp || 0);
-  const attack = 420 + (level - 1) * 80 + luck * 25 + (bonus.attack || 0);
+  const attack = 420 + (level - 1) * 80 + luck * 25 + (bonus.attack || 0) + pet.attack;
   const defense = 300 + (level - 1) * 55 + owned * 30 + (bonus.defense || 0);
-  const speed = 100 + Math.min(60, (level - 1) * 2) + xpBoost * 3 + (bonus.speed || 0);
+  const speed = 100 + Math.min(60, (level - 1) * 2) + xpBoost * 3 + (bonus.speed || 0) + pet.speed;
   const crit = Math.min(60, 5 + luck * 3 + Math.floor(level / 5) + (bonus.crit || 0));
   const critDamage = 150 + xpBoost * 8 + (bonus.critDamage || 0);
   const itemPower = equipped ? Math.round(equipped.basePower * (1 + (itemLevel - 1) * 0.18)) : 0;
   const power = Math.round(hp * 0.45 + attack * 2.2 + defense * 1.25 + speed * 5 + crit * 45 + critDamage * 8 + itemPower);
-  return { hp, attack, defense, speed, crit, critDamage, power };
+  return { hp, attack, defense, speed, crit, critDamage, power, petLevel: pet.level, petDamageBonus: pet.damageBonus };
 }
 
 const calculateHeroPower = (player, inventory) => calculateHeroStats(player, inventory).power;
@@ -219,13 +237,14 @@ async function pvpTargets(user) {
   const targets = await Promise.all((candidates || []).map(async opponent => {
     const inventory = await supabase('inventory', { query: `?player_id=eq.${Number(opponent.telegram_id)}&count=gt.0&select=item_id,count` });
     const stats = calculateHeroStats(opponent, inventory || []);
-    return { id: String(opponent.telegram_id), name: opponent.display_name || 'Игрок', photo: opponent.photo_url || '', level: Number(opponent.level) || 1, equipment: opponent.equipped_id || '', power: stats.power, online: Date.now() - new Date(opponent.last_seen || 0).getTime() < 120000 };
+    const rating = pvpRating(opponent.upgrades);
+    return { id: String(opponent.telegram_id), name: opponent.display_name || 'Игрок', photo: opponent.photo_url || '', level: Number(opponent.level) || 1, equipment: opponent.equipped_id || '', power: stats.power, rating, league: pvpLeague(rating).id, streak: Number(opponent.upgrades?.pvp?.streak) || 0, bounty: pvpBounty(opponent.upgrades), online: Date.now() - new Date(opponent.last_seen || 0).getTime() < 120000 };
   }));
   if (targets.length < 3) {
     const ownRows = await supabase('players', { query: `?telegram_id=eq.${uid}&select=level,equipped_id,upgrades` });
     const ownInventory = await supabase('inventory', { query: `?player_id=eq.${uid}&count=gt.0&select=item_id,count` });
     const ownPower = calculateHeroPower(ownRows?.[0] || { level: 1, upgrades: {} }, ownInventory || []);
-    for (const bot of pvpBots.slice(0, 3 - targets.length)) targets.push({ id: bot.id, name: bot.display_name, photo: '', level: bot.level, equipment: bot.equipped_id, power: Math.round(ownPower * bot.powerScale), online: false, training: true });
+    for (const bot of pvpBots.slice(0, 3 - targets.length)) targets.push({ id: bot.id, name: bot.display_name, photo: '', level: bot.level, equipment: bot.equipped_id, power: Math.round(ownPower * bot.powerScale), rating: 1000, league: 'Bronze', streak: 0, bounty: 0, online: false, training: true });
   }
   const snapshot = await rpc('player_snapshot', { p_id: uid });
   snapshot.event = { status: 'targets', targets };
@@ -262,7 +281,7 @@ async function pvpMatch(user, payload = {}) {
   if (selectedBot) rival.power = Math.round(hero.power * selectedBot.powerScale);
   const enemy = { id: `pvp_${opponent.telegram_id}`, name: opponent.display_name || 'Соперник', type: 'assassin', power: rival.power, reward: [700, 1800], xp: 120 };
   const battle = createBattleState(hero, enemy, inventory || [], 'pvp');
-  Object.assign(battle, { opponentId: selectedBot?.id || String(opponent.telegram_id), opponentLevel: Number(opponent.level) || 1, opponentEquipment: opponent.equipped_id || '', opponentPhoto: opponent.photo_url || '', opponentOnline: selectedBot ? false : Date.now() - new Date(opponent.last_seen || 0).getTime() < 120000, training: Boolean(selectedBot) });
+  Object.assign(battle, { opponentId: selectedBot?.id || String(opponent.telegram_id), opponentLevel: Number(opponent.level) || 1, opponentEquipment: opponent.equipped_id || '', opponentPhoto: opponent.photo_url || '', opponentOnline: selectedBot ? false : Date.now() - new Date(opponent.last_seen || 0).getTime() < 120000, opponentRating: pvpRating(opponent.upgrades), opponentLeague: pvpLeague(pvpRating(opponent.upgrades)).id, opponentBounty: selectedBot ? 0 : pvpBounty(opponent.upgrades), training: Boolean(selectedBot) });
   const upgrades = player.upgrades && typeof player.upgrades === 'object' ? player.upgrades : {};
   const updated = await supabase('players', { method: 'PATCH', query: `?telegram_id=eq.${uid}&balance=eq.${Number(player.balance) || 0}&xp=eq.${Number(player.xp) || 0}`, body: { upgrades: { ...upgrades, battle } } });
   if (!updated?.length) throw new Error('Profile changed, try again');
@@ -290,7 +309,7 @@ async function battleTurn(user, payload) {
   const log = [];
   let multiplier = 1;
   if (move === 'skill') { multiplier = 1.75; battle.skillCd = 3; log.push('Ты используешь Неоновый разрез'); }
-  if (move === 'pet') { multiplier = 0.75; battle.petCd = 3; log.push('Питомец атакует противника'); }
+  if (move === 'pet') { multiplier = 0.75 + Number(battle.heroStats.petDamageBonus || 0) / 100; battle.petCd = 3; log.push(`Питомец применяет Плазменный укус ур. ${Number(battle.heroStats.petLevel) || 1}`); }
   if (move === 'aura') { battle.auraShield = 0.55; battle.auraCd = 4; log.push('Аура поглощает 55% следующего урона'); }
   if (move !== 'aura') {
     const crit = crypto.randomInt(100) < Number(battle.heroStats.crit || 0);
@@ -338,13 +357,15 @@ async function battleTurn(user, payload) {
     const pve = upgrades.pve && typeof upgrades.pve === 'object' ? upgrades.pve : {};
     const tower = upgrades.tower && typeof upgrades.tower === 'object' ? upgrades.tower : { floor: 1, best: 0, wins: 0 };
     reward = victory ? crypto.randomInt(Number(battle.rewardMin), Number(battle.rewardMax) + 1) : 0;
+    if (victory && battle.mode === 'pvp') reward += Number(battle.opponentBounty) || 0;
     xpReward = victory ? Number(battle.xpReward) : 10;
     nextUpgrades = { ...upgrades };
     delete nextUpgrades.battle;
     if (battle.mode === 'tower') nextUpgrades.tower = { floor: victory ? Number(battle.floor) + 1 : Number(battle.floor), best: Math.max(Number(tower.best) || 0, victory ? Number(battle.floor) : 0), wins: (Number(tower.wins) || 0) + (victory ? 1 : 0) };
     else if (battle.mode === 'pvp') {
       const pvp = upgrades.pvp && typeof upgrades.pvp === 'object' ? upgrades.pvp : {};
-      nextUpgrades.pvp = { matches: (Number(pvp.matches) || 0) + 1, wins: (Number(pvp.wins) || 0) + (victory ? 1 : 0), losses: (Number(pvp.losses) || 0) + (defeat ? 1 : 0), streak: victory ? (Number(pvp.streak) || 0) + 1 : 0, bestStreak: Math.max(Number(pvp.bestStreak) || 0, victory ? (Number(pvp.streak) || 0) + 1 : 0) };
+      const rating = Math.max(0, (Number(pvp.rating) || 1000) + (victory ? 25 : -18));
+      nextUpgrades.pvp = { ...pvp, matches: (Number(pvp.matches) || 0) + 1, wins: (Number(pvp.wins) || 0) + (victory ? 1 : 0), losses: (Number(pvp.losses) || 0) + (defeat ? 1 : 0), streak: victory ? (Number(pvp.streak) || 0) + 1 : 0, bestStreak: Math.max(Number(pvp.bestStreak) || 0, victory ? (Number(pvp.streak) || 0) + 1 : 0), rating, league: pvpLeague(rating).id };
     } else nextUpgrades.pve = { battles: (Number(pve.battles) || 0) + 1, wins: (Number(pve.wins) || 0) + (victory ? 1 : 0), lastEnemy: battle.enemyId };
     if (battle.mode === 'boss') {
       const bosses = upgrades.bosses && typeof upgrades.bosses === 'object' ? upgrades.bosses : {};
@@ -366,6 +387,143 @@ async function battleTurn(user, payload) {
   if (victory || defeat) await rpc('apply_player_levels', { p_id: uid });
   const snapshot = await rpc('player_snapshot', { p_id: uid });
   snapshot.event = { status: victory ? 'victory' : defeat ? 'defeat' : 'active', battle: victory || defeat ? null : battle, finishedBattle: victory || defeat ? battle : null, log, reward, xp: xpReward, drop };
+  return snapshot;
+}
+
+const onlineMatchView = (row, uid) => {
+  if (!row) return null;
+  const state = row.state || {};
+  const me = state.players?.[String(uid)] || {};
+  const opponentId = Number(row.player_one) === uid ? Number(row.player_two) : Number(row.player_one);
+  const opponent = state.players?.[String(opponentId)] || {};
+  return { id: row.id, status: row.status, version: Number(row.version) || 1, turn: Number(state.turn), isMyTurn: Number(state.turn) === uid, winnerId: row.winner_id ? Number(row.winner_id) : 0, me, opponent: { ...opponent, id: opponentId }, log: state.log || [], reward: Number(state.rewards?.[String(uid)]) || 0, ratingChange: Number(state.ratingChanges?.[String(uid)]) || 0 };
+};
+
+async function updateOnlinePvpPlayer(playerId, victory, reward) {
+  const rows = await supabase('players', { query: `?telegram_id=eq.${playerId}&select=balance,xp,upgrades` });
+  const player = rows?.[0];
+  if (!player) return;
+  const upgrades = player.upgrades && typeof player.upgrades === 'object' ? player.upgrades : {};
+  const old = upgrades.pvp && typeof upgrades.pvp === 'object' ? upgrades.pvp : {};
+  const ratingChange = victory ? 30 : -20;
+  const rating = Math.max(0, (Number(old.rating) || 1000) + ratingChange);
+  const pvp = { ...old, matches: (Number(old.matches) || 0) + 1, wins: (Number(old.wins) || 0) + (victory ? 1 : 0), losses: (Number(old.losses) || 0) + (victory ? 0 : 1), streak: victory ? (Number(old.streak) || 0) + 1 : 0, bestStreak: Math.max(Number(old.bestStreak) || 0, victory ? (Number(old.streak) || 0) + 1 : 0), rating, league: pvpLeague(rating).id };
+  await supabase('players', { method: 'PATCH', query: `?telegram_id=eq.${playerId}&balance=eq.${Number(player.balance) || 0}&xp=eq.${Number(player.xp) || 0}`, body: { balance: Number(player.balance) + reward, xp: Number(player.xp) + (victory ? 160 : 45), upgrades: { ...upgrades, pvp } } });
+  await rpc('apply_player_levels', { p_id: playerId });
+  return ratingChange;
+}
+
+async function onlinePvp(user, payload = {}) {
+  const uid = Number(user.id);
+  const command = String(payload.command || 'status');
+  if (!['join', 'status', 'turn', 'cancel'].includes(command)) throw new Error('Invalid online PvP command');
+  const activeRows = await supabase('pvp_matches', { query: `?or=(player_one.eq.${uid},player_two.eq.${uid})&status=eq.active&select=id,player_one,player_two,state,status,winner_id,version,updated_at&order=updated_at.desc&limit=1` });
+  let match = activeRows?.[0];
+  if (command === 'cancel') {
+    await supabase('pvp_queue', { method: 'DELETE', query: `?player_id=eq.${uid}` });
+    const snapshot = await rpc('player_snapshot', { p_id: uid });
+    snapshot.event = { status: 'cancelled', onlineMatch: match ? onlineMatchView(match, uid) : null };
+    return snapshot;
+  }
+  if (command === 'turn') {
+    if (!match || match.id !== String(payload.match_id || '')) throw new Error('Онлайн-матч не найден');
+    const move = String(payload.move || 'attack');
+    if (!['attack', 'skill', 'pet'].includes(move)) throw new Error('Invalid online move');
+    const state = structuredClone(match.state || {});
+    if (Number(state.turn) !== uid) throw new Error('Сейчас ход соперника');
+    const opponentId = Number(match.player_one) === uid ? Number(match.player_two) : Number(match.player_one);
+    const hero = state.players?.[String(uid)];
+    const enemy = state.players?.[String(opponentId)];
+    if (!hero || !enemy) throw new Error('Данные матча повреждены');
+    if (move === 'pet' && !hero.petLevel) throw new Error('Питомец не найден');
+    const multiplier = move === 'skill' ? 1.55 : move === 'pet' ? 0.8 + Number(hero.petDamageBonus || 0) / 100 : 1;
+    const crit = crypto.randomInt(100) < Number(hero.crit || 0);
+    const damage = randomDamage(Math.max(Number(hero.attack) * 0.25, Number(hero.attack) * multiplier * (crit ? Number(hero.critDamage || 150) / 100 : 1) - Number(enemy.defense) * 0.35));
+    enemy.hp = Math.max(0, Number(enemy.hp) - damage);
+    state.log = [...(state.log || []), `${hero.name}: ${move === 'pet' ? 'питомец' : move === 'skill' ? 'навык' : 'атака'} −${damage} HP`].slice(-8);
+    const finished = enemy.hp <= 0;
+    state.turn = opponentId;
+    if (finished) {
+      const bounty = Number(enemy.bounty) || 0;
+      state.rewards = { [String(uid)]: 1200 + bounty, [String(opponentId)]: 0 };
+      state.ratingChanges = { [String(uid)]: 30, [String(opponentId)]: -20 };
+    }
+    const updated = await supabase('pvp_matches', { method: 'PATCH', query: `?id=eq.${match.id}&status=eq.active&version=eq.${Number(match.version) || 1}`, body: { state, status: finished ? 'finished' : 'active', winner_id: finished ? uid : null, version: (Number(match.version) || 1) + 1, updated_at: new Date().toISOString() } });
+    if (!updated?.length) throw new Error('Ход уже изменился, обнови матч');
+    match = updated[0];
+    if (finished) {
+      await Promise.all([updateOnlinePvpPlayer(uid, true, Number(state.rewards[String(uid)])), updateOnlinePvpPlayer(opponentId, false, 0)]);
+    }
+  } else if (!match && command === 'join') {
+    const [players, inventory] = await Promise.all([
+      supabase('players', { query: `?telegram_id=eq.${uid}&select=telegram_id,display_name,photo_url,level,equipped_id,upgrades,blocked` }),
+      supabase('inventory', { query: `?player_id=eq.${uid}&count=gt.0&select=item_id,count` })
+    ]);
+    const player = players?.[0];
+    if (!player || player.blocked) throw new Error('Игрок недоступен');
+    const stats = calculateHeroStats(player, inventory || []);
+    const rating = pvpRating(player.upgrades);
+    const snapshot = { id: uid, name: player.display_name || 'Игрок', photo: player.photo_url || '', level: Number(player.level) || 1, equipment: player.equipped_id || '', rating, league: pvpLeague(rating).id, bounty: pvpBounty(player.upgrades), ...stats, hp: stats.hp, maxHp: stats.hp };
+    const cutoff = new Date(Date.now() - 90000).toISOString();
+    const waiting = await supabase('pvp_queue', { query: `?player_id=neq.${uid}&last_seen=gte.${encodeURIComponent(cutoff)}&select=player_id,rating,power,snapshot,joined_at&order=joined_at.asc&limit=1` });
+    const opponent = waiting?.[0];
+    if (opponent) {
+      const opponentSnapshot = opponent.snapshot || {};
+      const firstTurn = crypto.randomInt(2) ? uid : Number(opponent.player_id);
+      const state = { turn: firstTurn, players: { [String(uid)]: snapshot, [String(opponent.player_id)]: opponentSnapshot }, log: ['Соперник найден. Онлайн-бой начался.'] };
+      const created = await supabase('pvp_matches', { method: 'POST', body: { player_one: Number(opponent.player_id), player_two: uid, state, status: 'active', version: 1 } });
+      match = created?.[0];
+      await supabase('pvp_queue', { method: 'DELETE', query: `?player_id=in.(${uid},${Number(opponent.player_id)})` });
+    } else {
+      await supabase('pvp_queue', { method: 'POST', query: '?on_conflict=player_id', prefer: 'resolution=merge-duplicates,return=representation', body: { player_id: uid, rating, power: stats.power, snapshot, joined_at: new Date().toISOString(), last_seen: new Date().toISOString() } });
+    }
+  } else if (!match) {
+    const queueRows = await supabase('pvp_queue', { query: `?player_id=eq.${uid}&select=player_id,last_seen` });
+    if (queueRows?.length) await supabase('pvp_queue', { method: 'PATCH', query: `?player_id=eq.${uid}`, body: { last_seen: new Date().toISOString() } });
+  }
+  if (!match) {
+    const finishedRows = await supabase('pvp_matches', { query: `?or=(player_one.eq.${uid},player_two.eq.${uid})&status=eq.finished&select=id,player_one,player_two,state,status,winner_id,version,updated_at&order=updated_at.desc&limit=1` });
+    match = finishedRows?.[0];
+  }
+  const snapshot = await rpc('player_snapshot', { p_id: uid });
+  snapshot.event = { status: match ? match.status : command === 'join' ? 'waiting' : 'idle', onlineMatch: onlineMatchView(match, uid) };
+  return snapshot;
+}
+
+async function petUpgrade(user) {
+  const uid = Number(user.id);
+  const [players, inventory] = await Promise.all([
+    supabase('players', { query: `?telegram_id=eq.${uid}&select=balance,upgrades` }),
+    supabase('inventory', { query: `?player_id=eq.${uid}&item_id=eq.pet&count=gt.0&select=count` })
+  ]);
+  const player = players?.[0];
+  if (!player || !inventory?.[0]) throw new Error('Сначала получи питомца в Spin');
+  const upgrades = player.upgrades && typeof player.upgrades === 'object' ? player.upgrades : {};
+  const pet = petProfile(upgrades, [{ item_id: 'pet', count: Number(inventory[0].count) }]);
+  if (pet.level >= 10) throw new Error('Питомец достиг максимального уровня');
+  const cost = pet.level * 1200;
+  if (Number(player.balance) < cost) throw new Error('Недостаточно Blox Coins');
+  const updated = await supabase('players', { method: 'PATCH', query: `?telegram_id=eq.${uid}&balance=eq.${Number(player.balance)}`, body: { balance: Number(player.balance) - cost, upgrades: { ...upgrades, pet: { level: pet.level + 1 } } } });
+  if (!updated?.length) throw new Error('Профиль изменился, повтори попытку');
+  const snapshot = await rpc('player_snapshot', { p_id: uid });
+  snapshot.event = { status: 'pet_upgraded', pet: petProfile({ ...upgrades, pet: { level: pet.level + 1 } }, [{ item_id: 'pet', count: Number(inventory[0].count) }]) };
+  return snapshot;
+}
+
+async function claimPvpLeague(user) {
+  const uid = Number(user.id);
+  const rows = await supabase('players', { query: `?telegram_id=eq.${uid}&select=balance,upgrades` });
+  const player = rows?.[0];
+  if (!player) throw new Error('Player not found');
+  const upgrades = player.upgrades && typeof player.upgrades === 'object' ? player.upgrades : {};
+  const pvp = upgrades.pvp && typeof upgrades.pvp === 'object' ? upgrades.pvp : {};
+  const season = new Date().toISOString().slice(0, 7);
+  if (pvp.leagueClaimed === season) throw new Error('Награда лиги уже получена');
+  const tier = pvpLeague(pvpRating(upgrades));
+  const updated = await supabase('players', { method: 'PATCH', query: `?telegram_id=eq.${uid}&balance=eq.${Number(player.balance)}`, body: { balance: Number(player.balance) + tier.reward, upgrades: { ...upgrades, pvp: { ...pvp, league: tier.id, leagueClaimed: season } } } });
+  if (!updated?.length) throw new Error('Профиль изменился, повтори попытку');
+  const snapshot = await rpc('player_snapshot', { p_id: uid });
+  snapshot.event = { status: 'league_reward', league: tier.id, reward: tier.reward };
   return snapshot;
 }
 
@@ -454,7 +612,7 @@ module.exports = async function handler(req, res) {
     const user = verifyTelegram(req.headers['x-telegram-init-data']);
     const body = await readBody(req);
     const action = String(body.action || 'bootstrap');
-    const allowed = new Set(['bootstrap', 'spin', 'pve_fight', 'battle_start', 'battle_turn', 'pvp_targets', 'pvp_match', 'survivor_start', 'survivor_finish', 'claim_daily', 'claim_mission', 'buy_upgrade', 'upgrade_item', 'item_action', 'claim_achievement', 'claim_league', 'rescue', 'open_chest', 'claim_season', 'claim_weekly', 'redeem_promo', 'referral_info', 'tournament_join']);
+    const allowed = new Set(['bootstrap', 'spin', 'pve_fight', 'battle_start', 'battle_turn', 'pvp_targets', 'pvp_match', 'pvp_online', 'pet_upgrade', 'claim_pvp_league', 'survivor_start', 'survivor_finish', 'claim_daily', 'claim_mission', 'buy_upgrade', 'upgrade_item', 'item_action', 'claim_achievement', 'claim_league', 'rescue', 'open_chest', 'claim_season', 'claim_weekly', 'redeem_promo', 'referral_info', 'tournament_join']);
     if (!allowed.has(action)) return json(res, 400, { ok: false, error: 'Unknown action' });
     if (action === 'upgrade_item') {
       const payload = await upgradeItem(user, body.payload || {});
@@ -473,6 +631,11 @@ module.exports = async function handler(req, res) {
     }
     if (action === 'pvp_targets' || action === 'pvp_match') {
       const payload = action === 'pvp_targets' ? await pvpTargets(user) : await pvpMatch(user, body.payload || {});
+      if (payload && typeof payload === 'object') payload.bot_username = process.env.TELEGRAM_BOT_USERNAME || '';
+      return json(res, 200, { ok: true, data: payload });
+    }
+    if (action === 'pvp_online' || action === 'pet_upgrade' || action === 'claim_pvp_league') {
+      const payload = action === 'pvp_online' ? await onlinePvp(user, body.payload || {}) : action === 'pet_upgrade' ? await petUpgrade(user) : await claimPvpLeague(user);
       if (payload && typeof payload === 'object') payload.bot_username = process.env.TELEGRAM_BOT_USERNAME || '';
       return json(res, 200, { ok: true, data: payload });
     }

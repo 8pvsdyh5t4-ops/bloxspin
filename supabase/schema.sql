@@ -114,6 +114,29 @@ create table if not exists tournament_entries (
   primary key (tournament_id, player_id)
 );
 
+create table if not exists pvp_queue (
+  player_id bigint primary key references players(telegram_id) on delete cascade,
+  rating integer not null default 1000,
+  power integer not null default 0,
+  snapshot jsonb not null default '{}'::jsonb,
+  joined_at timestamptz not null default now(),
+  last_seen timestamptz not null default now()
+);
+create index if not exists pvp_queue_match_idx on pvp_queue(rating, joined_at);
+
+create table if not exists pvp_matches (
+  id uuid primary key default gen_random_uuid(),
+  player_one bigint not null references players(telegram_id) on delete cascade,
+  player_two bigint not null references players(telegram_id) on delete cascade,
+  state jsonb not null default '{}'::jsonb,
+  status text not null default 'active' check (status in ('active','finished','cancelled')),
+  winner_id bigint references players(telegram_id),
+  version integer not null default 1,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists pvp_matches_players_idx on pvp_matches(player_one, player_two, updated_at desc);
+
 create table if not exists game_config (
   id boolean primary key default true check (id),
   config jsonb not null default '{"spin_enabled":true,"chest_cost":1000,"referral_inviter":1000,"referral_invitee":500}'::jsonb,
@@ -141,6 +164,8 @@ alter table promo_codes enable row level security;
 alter table promo_redemptions enable row level security;
 alter table tournaments enable row level security;
 alter table tournament_entries enable row level security;
+alter table pvp_queue enable row level security;
+alter table pvp_matches enable row level security;
 alter table game_config enable row level security;
 alter table admin_audit enable row level security;
 
