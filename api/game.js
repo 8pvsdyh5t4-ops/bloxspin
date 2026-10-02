@@ -1,15 +1,46 @@
 const crypto = require('crypto');
 const { json, readBody, verifyTelegram, isOwner, supabase, rpc, publicUser } = require('./_lib');
 
-const itemUpgradeBase = { block: 50, sword: 150, pet: 400, crystal: 900, crown: 2000, secret: 5000 };
+const itemUpgradeBase = { block: 50, sword: 150, pet: 400, crystal: 900, crown: 2000, secret: 5000, eclipse_blade: 3200, nova_pet: 4200, void_relic: 6500 };
 const combatItems = {
   block: { basePower: 180, stats: { hp: 180, defense: 110 } },
   sword: { basePower: 420, stats: { attack: 220, crit: 3 } },
   pet: { basePower: 760, stats: { attack: 140, speed: 10 } },
   crystal: { basePower: 1150, stats: { defense: 180, critDamage: 30 } },
   crown: { basePower: 1850, stats: { hp: 650, crit: 7 } },
-  secret: { basePower: 2850, stats: { hp: 800, attack: 420, defense: 320, speed: 14, crit: 8, critDamage: 45 } }
+  secret: { basePower: 2850, stats: { hp: 800, attack: 420, defense: 320, speed: 14, crit: 8, critDamage: 45 } },
+  eclipse_blade: { basePower: 2350, stats: { attack: 540, speed: 18, crit: 10 } },
+  nova_pet: { basePower: 2650, stats: { hp: 350, attack: 390, speed: 24 } },
+  void_relic: { basePower: 3400, stats: { hp: 700, defense: 460, crit: 9, critDamage: 55 } }
 };
+const limitedItems = {
+  eclipse_blade: { name: 'Eclipse Blade', rarity: 'Legendary', startsAt: '2026-10-01T00:00:00.000Z', endsAt: '2026-11-01T00:00:00.000Z' },
+  nova_pet: { name: 'Nova Pet', rarity: 'Legendary', startsAt: '2026-10-01T00:00:00.000Z', endsAt: '2026-11-01T00:00:00.000Z' },
+  void_relic: { name: 'Void Relic', rarity: 'Secret', startsAt: '2026-10-01T00:00:00.000Z', endsAt: '2026-11-01T00:00:00.000Z' }
+};
+const seasonCatalog = {
+  '2026-10': {
+    name: 'NEON ECLIPSE', theme: 'Неоновое затмение', boss: 'Повелитель Затмения', endsAt: '2026-11-01T00:00:00.000Z',
+    rewards: [
+      { level: 1, points: 100, coins: 1000, crystals: 2 },
+      { level: 2, points: 200, coins: 2000, crystals: 4 },
+      { level: 3, points: 300, coins: 3000, crystals: 6 },
+      { level: 4, points: 400, coins: 4000, crystals: 8 },
+      { level: 5, points: 500, coins: 5000, crystals: 10, itemId: 'void_relic' }
+    ]
+  }
+};
+const achievementCatalog = [
+  { id: 'firstSpin', category: 'spin', name: 'Первый спин', description: 'Сделай первое вращение', target: 1, coins: 250, crystals: 1, title: 'Новичок' },
+  { id: 'winner25', category: 'wins', name: 'Победитель', description: 'Получи 25 побед в Spin', target: 25, coins: 3000, crystals: 5, title: 'Победитель' },
+  { id: 'collector6', category: 'collection', name: 'Коллекционер', description: 'Собери 6 разных предметов', target: 6, coins: 4000, crystals: 6, title: 'Коллекционер' },
+  { id: 'boss5', category: 'boss', name: 'Гроза боссов', description: 'Победи 5 боссов', target: 5, coins: 5000, crystals: 8, title: 'Охотник на боссов' },
+  { id: 'pvp10', category: 'pvp', name: 'Гладиатор', description: 'Выиграй 10 PvP-боёв', target: 10, coins: 5000, crystals: 8, title: 'Гладиатор' },
+  { id: 'tower10', category: 'tower', name: 'Покоритель башни', description: 'Пройди 10 этажей башни', target: 10, coins: 6000, crystals: 10, title: 'Покоритель башни' },
+  { id: 'survivor10', category: 'survivor', name: 'Несокрушимый', description: 'Дойди до 10 волны Survivor', target: 10, coins: 6000, crystals: 10, title: 'Несокрушимый' },
+  { id: 'limitedOwner', category: 'rare', name: 'Хранитель времени', description: 'Получи limited-предмет', target: 1, coins: 10000, crystals: 20, title: 'Хранитель Затмения' },
+  { id: 'secret', category: 'rare', name: 'Охотник за тайнами', description: 'Найди Secret-предмет', target: 1, coins: 7500, crystals: 15, title: 'Искатель тайн' }
+];
 const setItemIds = ['sword', 'block', 'pet', 'crystal', 'crown'];
 const shopOffers = {
   starter_weapon: { itemId: 'sword', count: 1, price: 80000 },
@@ -36,7 +67,8 @@ const pveEnemies = {
 };
 const bossEnemies = {
   inferno: { id: 'inferno', name: 'Инферно Голем', type: 'boss', power: 12000, reward: [3000, 11000], xp: 300, phases: ['Каменная броня', 'Вулканическая ярость', 'Огненный апокалипсис'], dropChance: 22, dropId: 'crystal' },
-  seasonal: { id: 'seasonal', name: 'Кибер-Дракон', type: 'boss', power: 15500, reward: [5000, 16000], xp: 450, phases: ['Плазменный щит', 'Рой дронов', 'Квантовый шторм'], dropChance: 35, dropId: 'crown', seasonal: true }
+  seasonal: { id: 'seasonal', name: 'Кибер-Дракон', type: 'boss', power: 15500, reward: [5000, 16000], xp: 450, phases: ['Плазменный щит', 'Рой дронов', 'Квантовый шторм'], dropChance: 35, dropId: 'crown', seasonal: true },
+  eclipse: { id: 'eclipse', name: 'Повелитель Затмения', type: 'boss', power: 19000, reward: [7000, 22000], xp: 600, phases: ['Теневая корона', 'Разлом света', 'Вечное затмение'], dropChance: 18, dropId: 'eclipse_blade', seasonal: true }
 };
 const pvpBots = [
   { id: 'bot_shadow', telegram_id: 0, display_name: 'ShadowKing', photo_url: '', level: 8, equipped_id: 'sword', upgrades: { luck: 1, xp: 1, itemLevels: { sword: 3 } }, powerScale: 0.9 },
@@ -61,6 +93,9 @@ function petProfile(upgrades, inventory) {
   return { owned, level, rarity, ability: 'Плазменный укус', damageBonus: level ? 12 + level * 6 : 0, attack: level * 35, speed: level * 2 };
 }
 const rollDropId = () => {
+  const now = Date.now();
+  const active = Object.entries(limitedItems).filter(([, item]) => now >= Date.parse(item.startsAt) && now < Date.parse(item.endsAt));
+  if (active.length && crypto.randomInt(10000) < 100) return active[crypto.randomInt(active.length)][0];
   const roll = crypto.randomInt(10000);
   if (roll < 6800) return 'block';
   if (roll < 9200) return 'sword';
@@ -1011,13 +1046,75 @@ async function clanAction(user, action, payload = {}) {
   return snapshot;
 }
 
+function achievementProgress(definition, player, inventory) {
+  const upgrades = player?.upgrades || {};
+  const ownedIds = new Set((inventory || []).filter(row => Number(row.count) > 0).map(row => row.item_id));
+  const values = { firstSpin: Number(player?.spins) || 0, winner25: Number(player?.wins) || 0, collector6: ownedIds.size, boss5: Number(upgrades?.bosses?.wins) || 0, pvp10: Number(upgrades?.pvp?.wins) || 0, tower10: Number(upgrades?.tower?.best) || 0, survivor10: Number(upgrades?.survivor?.bestWave) || 0, limitedOwner: Object.keys(limitedItems).some(id => ownedIds.has(id)) ? 1 : 0, secret: ownedIds.has('secret') || ownedIds.has('void_relic') ? 1 : 0 };
+  return Math.max(0, Number(values[definition.id]) || 0);
+}
+
+async function roadmapState(user, snapshot) {
+  const uid = Number(user.id);
+  const player = snapshot?.player || (await supabase('players', { query: `?telegram_id=eq.${uid}&select=*` }))?.[0];
+  const inventoryRows = await supabase('inventory', { query: `?player_id=eq.${uid}&select=item_id,count,discovered` });
+  const claimRows = snapshot?.claims?.once ? [] : await supabase('mission_claims', { query: `?player_id=eq.${uid}&period=eq.once&select=mission_id` });
+  const claimed = new Set(snapshot?.claims?.once || claimRows.map(row => row.mission_id));
+  const achievements = achievementCatalog.map(definition => { const progress = achievementProgress(definition, player, inventoryRows); return { ...definition, progress, complete: progress >= definition.target, claimed: claimed.has(`achievement_${definition.id}`) }; });
+  const key = seasonKey();
+  const catalog = seasonCatalog[key] || { name: `СЕЗОН ${key}`, theme: 'BloxSpin', boss: 'Сезонный босс', endsAt: new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 1)).toISOString(), rewards: [1,2,3,4,5].map(level => ({ level, points: level * 100, coins: level * 1000, crystals: level * 2 })) };
+  const seasonRows = await supabase('season_progress', { query: `?season_key=eq.${encodeURIComponent(key)}&select=player_id,points&order=points.desc&limit=20` });
+  const ids = (seasonRows || []).map(row => row.player_id);
+  const people = ids.length ? await supabase('players', { query: `?telegram_id=in.(${ids.join(',')})&select=telegram_id,display_name,level` }) : [];
+  const names = Object.fromEntries((people || []).map(person => [String(person.telegram_id), person]));
+  const leaderboard = (seasonRows || []).map((row, index) => ({ rank: index + 1, playerId: row.player_id, name: names[String(row.player_id)]?.display_name || 'Игрок', level: Number(names[String(row.player_id)]?.level) || 1, points: Number(row.points) || 0, me: Number(row.player_id) === uid }));
+  const activeLimited = Object.entries(limitedItems).map(([id, item]) => ({ id, ...item, active: Date.now() >= Date.parse(item.startsAt) && Date.now() < Date.parse(item.endsAt), owned: (inventoryRows || []).some(row => row.item_id === id && Number(row.count) > 0) }));
+  const titles = player?.upgrades?.titles || {};
+  const ownedTitles = [...new Set(['Игрок BloxSpin', ...(Array.isArray(titles.owned) ? titles.owned : []), ...achievements.filter(item => item.claimed).map(item => item.title)])];
+  const membership = await clanMembership(uid).catch(() => null);
+  let clanName = '';
+  if (membership) clanName = (await supabase('clans', { query: `?id=eq.${membership.clan_id}&select=name&limit=1` }))?.[0]?.name || '';
+  return { achievements, seasonInfo: { key, ...catalog, points: Number(snapshot?.season?.points) || 0, claimed: snapshot?.season?.claimed || {}, leaderboard }, limitedItems: activeLimited, profileInfo: { activeTitle: ownedTitles.includes(titles.active) ? titles.active : ownedTitles[0], titles: ownedTitles, clanName, achievementCount: achievements.filter(item => item.claimed).length, achievementTotal: achievements.length } };
+}
+
+async function attachRoadmap(snapshot, user) { if (snapshot && typeof snapshot === 'object') Object.assign(snapshot, await roadmapState(user, snapshot)); return snapshot; }
+
+async function claimAchievement(user, payload) {
+  const uid = Number(user.id), id = String(payload?.id || '');
+  const definition = achievementCatalog.find(item => item.id === id);
+  if (!definition) throw new Error('Достижение не найдено');
+  const [players, inventory] = await Promise.all([supabase('players', { query: `?telegram_id=eq.${uid}&select=*` }), supabase('inventory', { query: `?player_id=eq.${uid}&select=item_id,count,discovered` })]);
+  const player = players?.[0];
+  if (!player || achievementProgress(definition, player, inventory) < definition.target) throw new Error('Достижение ещё не выполнено');
+  const missionId = `achievement_${id}`;
+  await supabase('mission_claims', { method: 'POST', body: { player_id: uid, period: 'once', mission_id: missionId } });
+  const upgrades = player.upgrades && typeof player.upgrades === 'object' ? player.upgrades : {}, oldTitles = upgrades.titles && typeof upgrades.titles === 'object' ? upgrades.titles : {};
+  const owned = [...new Set([...(Array.isArray(oldTitles.owned) ? oldTitles.owned : []), definition.title])];
+  try {
+    const updated = await supabase('players', { method: 'PATCH', query: `?telegram_id=eq.${uid}&balance=eq.${Number(player.balance)}&crystals=eq.${Number(player.crystals) || 0}`, body: { balance: Number(player.balance) + definition.coins, crystals: (Number(player.crystals) || 0) + definition.crystals, xp: (Number(player.xp) || 0) + 50, upgrades: { ...upgrades, titles: { owned, active: oldTitles.active || definition.title } } } });
+    if (!updated?.length) throw new Error('Профиль изменился, повтори получение');
+  } catch (error) { await supabase('mission_claims', { method: 'DELETE', query: `?player_id=eq.${uid}&period=eq.once&mission_id=eq.${encodeURIComponent(missionId)}` }).catch(() => {}); throw error; }
+  await rpc('apply_player_levels', { p_id: uid });
+  const snapshot = await rpc('player_snapshot', { p_id: uid });
+  snapshot.event = { status: 'achievement_claimed', achievement: id, coins: definition.coins, crystals: definition.crystals, title: definition.title };
+  return attachRoadmap(snapshot, user);
+}
+
+async function setProfileTitle(user, payload) {
+  const uid = Number(user.id), title = String(payload?.title || '').slice(0, 40);
+  const rows = await supabase('players', { query: `?telegram_id=eq.${uid}&select=upgrades` });
+  const upgrades = rows?.[0]?.upgrades || {}, titles = upgrades.titles || {}, owned = ['Игрок BloxSpin', ...(Array.isArray(titles.owned) ? titles.owned : [])];
+  if (!owned.includes(title)) throw new Error('Титул ещё не открыт');
+  await supabase('players', { method: 'PATCH', query: `?telegram_id=eq.${uid}`, body: { upgrades: { ...upgrades, titles: { ...titles, owned: [...new Set(owned)], active: title } } } });
+  const snapshot = await rpc('player_snapshot', { p_id: uid }); snapshot.event = { status: 'title_changed', title }; return attachRoadmap(snapshot, user);
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'POST required' });
   try {
     const user = verifyTelegram(req.headers['x-telegram-init-data']);
     const body = await readBody(req);
     const action = String(body.action || 'bootstrap');
-    const allowed = new Set(['bootstrap', 'spin', 'pve_fight', 'battle_start', 'battle_turn', 'pvp_targets', 'pvp_match', 'pvp_online', 'pet_upgrade', 'claim_pvp_league', 'survivor_start', 'survivor_finish', 'claim_daily', 'claim_mission', 'buy_upgrade', 'upgrade_item', 'aura_upgrade', 'evolve_item', 'shop_buy', 'star_invoice', 'cosmetic_equip', 'economy_status', 'item_action', 'claim_achievement', 'claim_league', 'rescue', 'open_chest', 'claim_season', 'claim_weekly', 'redeem_promo', 'referral_info', 'tournament_join', 'market_state', 'market_sell', 'market_buy', 'market_cancel', 'clan_state', 'clan_create', 'clan_join', 'clan_leave', 'clan_contribute', 'clan_role', 'clan_raid_attack', 'clan_raid_claim', 'clan_war_attack']);
+    const allowed = new Set(['bootstrap', 'spin', 'pve_fight', 'battle_start', 'battle_turn', 'pvp_targets', 'pvp_match', 'pvp_online', 'pet_upgrade', 'claim_pvp_league', 'survivor_start', 'survivor_finish', 'claim_daily', 'claim_mission', 'buy_upgrade', 'upgrade_item', 'aura_upgrade', 'evolve_item', 'shop_buy', 'star_invoice', 'cosmetic_equip', 'economy_status', 'item_action', 'claim_achievement', 'profile_title', 'claim_league', 'rescue', 'open_chest', 'claim_season', 'claim_weekly', 'redeem_promo', 'referral_info', 'tournament_join', 'market_state', 'market_sell', 'market_buy', 'market_cancel', 'clan_state', 'clan_create', 'clan_join', 'clan_leave', 'clan_contribute', 'clan_role', 'clan_raid_attack', 'clan_raid_claim', 'clan_war_attack']);
     if (!allowed.has(action)) return json(res, 400, { ok: false, error: 'Unknown action' });
     if (action.startsWith('market_')) {
       const payload = await marketAction(user, action.slice(7), body.payload || {});
@@ -1031,6 +1128,11 @@ module.exports = async function handler(req, res) {
     }
     if (action === 'claim_mission' && ['bots3','spins3','tower1','pvp1','upgrade1'].includes(String(body.payload?.id || ''))) {
       const payload = await rpc('claim_daily_mission', { p_id: Number(user.id), p_mission: String(body.payload.id) });
+      payload.bot_username = process.env.TELEGRAM_BOT_USERNAME || '';
+      return json(res, 200, { ok: true, data: payload });
+    }
+    if (action === 'claim_achievement' || action === 'profile_title') {
+      const payload = action === 'claim_achievement' ? await claimAchievement(user, body.payload || {}) : await setProfileTitle(user, body.payload || {});
       payload.bot_username = process.env.TELEGRAM_BOT_USERNAME || '';
       return json(res, 200, { ok: true, data: payload });
     }
@@ -1087,21 +1189,21 @@ module.exports = async function handler(req, res) {
       p_is_owner: isOwner(user)
     });
     if (action === 'spin') payload = await normalizeSpinDrop(user, payload);
-    if (action === 'claim_achievement') {
-      const amounts = { firstSpin: 1, collector: 2, winner10: 3, spins25: 3, level5: 5, secret: 10 };
-      await rpc('grant_claim_crystals', { p_id: Number(user.id), p_kind: 'achievement', p_key: String(body.payload?.id || ''), p_amount: amounts[body.payload?.id] || 1 });
-      payload = await rpc('player_snapshot', { p_id: Number(user.id) });
-    }
     if (action === 'claim_season') {
       const level = Math.max(1, Math.min(50, Number(body.payload?.level) || 1));
       await rpc('grant_claim_crystals', { p_id: Number(user.id), p_kind: 'season', p_key: `${seasonKey()}_${level}`, p_amount: level * 2 });
+      const reward = seasonCatalog[seasonKey()]?.rewards?.find(item => item.level === level);
+      if (reward?.itemId) await supabase('inventory', { method: 'POST', query: '?on_conflict=player_id,item_id', prefer: 'resolution=merge-duplicates,return=representation', body: { player_id: Number(user.id), item_id: reward.itemId, count: (Number((await supabase('inventory', { query: `?player_id=eq.${Number(user.id)}&item_id=eq.${reward.itemId}&select=count` }))?.[0]?.count) || 0) + 1, discovered: true } });
       payload = await rpc('player_snapshot', { p_id: Number(user.id) });
+      payload.event = { status: 'season_reward', level, itemId: reward?.itemId || '', crystals: level * 2 };
     }
     if (action === 'bootstrap') {
       await attachEconomy(payload, Number(user.id));
       payload.market = await marketState(user).catch(() => ({ active: [], history: [], feePercent: 10, maxActive: 5 }));
       payload.clan = await clanState(user).catch(() => ({ membership: null, clans: [], leaderboard: [] }));
+      await attachRoadmap(payload, user);
     }
+    if (action === 'claim_season') await attachRoadmap(payload, user);
     if (payload && typeof payload === 'object') payload.bot_username = process.env.TELEGRAM_BOT_USERNAME || '';
     return json(res, 200, { ok: true, data: payload });
   } catch (error) {

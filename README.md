@@ -27,6 +27,8 @@ Shop prices are paced against a 30,000–70,000 Coin daily income target: ordina
 
 Digital purchases use Telegram Stars invoices and contain only explicit cosmetic products: profile frames, hero trails, victory effects, skins and a fixed Founder bundle. The server creates the invoice, validates Telegram pre-checkout updates, waits for `successful_payment`, records the Telegram charge, and only then grants and activates the cosmetic. Paid random spins are not offered.
 
+Achievements now track Spin wins, collection size, boss wins, PvP wins, Tower floors, Survivor waves and rare ownership. Claiming one grants Coins, Crystals and a selectable profile title. Monthly seasons provide a themed pass, a points leaderboard, a seasonal boss and temporary rewards. Neon Eclipse adds three limited items; they leave the drop pool when the event ends but remain permanently protected in their owners' inventories. The player profile summarizes level, Power, best item, Spin count, PvP record and league, clan, achievements and unlocked titles.
+
 ## Setup
 
 1. Create a Supabase project and run `supabase/schema.sql` in its SQL editor.
