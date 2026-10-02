@@ -23,6 +23,10 @@ Online PvP adds a live matchmaking queue, synchronized alternating turns and a s
 
 Auras now have ten levels, evolving visual tiers and passive attack, defense and critical bonuses. The five-piece Cyber Sovereign set unlocks cumulative bonuses at 2/3/4/5 owned pieces and a full-set hero effect. Every item supports three server-saved evolution ranks that consume duplicates and Coins while increasing Power, combat stats and appearance. The Items screen also includes a server-backed shop for weapons, armor, pets, auras, materials and a monthly seasonal skin.
 
+Shop prices are paced against a 30,000–70,000 Coin daily income target: ordinary gear takes one or more active days, Mythic and Legendary gear require longer saving, and Secret items are drop-only. Item sales remove a 10% fee. Every balance change is recorded in the economy ledger, and the shop displays the player's daily income and spending.
+
+Digital purchases use Telegram Stars invoices and contain only explicit cosmetic products: profile frames, hero trails, victory effects, skins and a fixed Founder bundle. The server creates the invoice, validates Telegram pre-checkout updates, waits for `successful_payment`, records the Telegram charge, and only then grants and activates the cosmetic. Paid random spins are not offered.
+
 ## Setup
 
 1. Create a Supabase project and run `supabase/schema.sql` in its SQL editor.

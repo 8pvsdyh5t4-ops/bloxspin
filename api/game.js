@@ -12,13 +12,20 @@ const combatItems = {
 };
 const setItemIds = ['sword', 'block', 'pet', 'crystal', 'crown'];
 const shopOffers = {
-  starter_weapon: { itemId: 'sword', count: 1, price: 2500 },
-  cyber_armor: { itemId: 'block', count: 1, price: 1800 },
-  dragon_egg: { itemId: 'pet', count: 1, price: 7500 },
-  void_aura: { itemId: 'crystal', count: 1, price: 15000 },
-  royal_crown: { itemId: 'crown', count: 1, price: 35000 },
-  evolution_pack: { itemId: 'sword', count: 2, price: 8000 },
-  seasonal_skin: { itemId: 'secret', count: 1, price: 125000, seasonal: true }
+  starter_weapon: { itemId: 'sword', count: 1, price: 80000 },
+  cyber_armor: { itemId: 'block', count: 1, price: 55000 },
+  dragon_egg: { itemId: 'pet', count: 1, price: 180000 },
+  void_aura: { itemId: 'crystal', count: 1, price: 320000 },
+  royal_crown: { itemId: 'crown', count: 1, price: 750000 },
+  evolution_pack: { itemId: 'sword', count: 2, price: 140000 },
+  seasonal_aura: { itemId: 'crystal', count: 2, price: 480000, seasonal: true }
+};
+const starProducts = {
+  neon_frame: { title: 'Неоновая рамка', description: 'Постоянная фиолетово-голубая рамка профиля.', stars: 75, grants: { frame: 'neon' } },
+  victory_burst: { title: 'Эффект победы', description: 'Постоянная призматическая вспышка после победы.', stars: 90, grants: { effect: 'prism' } },
+  void_trail: { title: 'След Пустоты', description: 'Постоянный косметический след для героя.', stars: 120, grants: { trail: 'void' } },
+  cyber_royal_skin: { title: 'Cyber Royal', description: 'Постоянный эксклюзивный скин героя.', stars: 250, grants: { skin: 'cyber_royal' } },
+  founder_pack: { title: 'Founder Pack', description: 'Рамка, золотой след, скин и эффект короны.', stars: 450, grants: { frame: 'founder', trail: 'gold', skin: 'founder', effect: 'crown' } }
 };
 const pveEnemies = {
   tank: { name: 'Железный танк', type: 'tank', power: 2600, reward: [200, 650], xp: 50 },
@@ -62,6 +69,46 @@ const rollDropId = () => {
   if (roll < 9998) return 'crown';
   return 'secret';
 };
+
+async function telegramApi(method, payload) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) throw new Error('Telegram payments are not configured');
+  const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+  });
+  const result = await response.json();
+  if (!response.ok || !result.ok) throw new Error(result.description || 'Telegram payment error');
+  return result.result;
+}
+
+const webhookSecret = () => crypto.createHash('sha256').update(`${process.env.TELEGRAM_BOT_TOKEN || ''}:bloxspin-stars`).digest('hex');
+
+async function ensurePaymentWebhook(req) {
+  const publicAppUrl = String(process.env.PUBLIC_APP_URL || 'https://bloxspin-alpha.vercel.app').replace(/\/$/, '');
+  const url = `${publicAppUrl}/api/telegram`;
+  const info = await telegramApi('getWebhookInfo', {});
+  if (info?.url && info.url !== url) throw new Error('Telegram webhook is managed by another service');
+  await telegramApi('setWebhook', { url, secret_token: webhookSecret(), allowed_updates: ['pre_checkout_query', 'message'], drop_pending_updates: false });
+}
+
+async function economySummary(uid) {
+  const start = new Date();
+  start.setUTCHours(0, 0, 0, 0);
+  const rows = await supabase('economy_ledger', { query: `?player_id=eq.${uid}&created_at=gte.${encodeURIComponent(start.toISOString())}&select=amount,currency,event_type&limit=5000` });
+  let earned = 0, spent = 0, stars = 0;
+  for (const row of rows || []) {
+    const amount = Number(row.amount) || 0;
+    if (row.currency === 'stars') stars += Math.abs(amount);
+    else if (amount > 0) earned += amount;
+    else spent += Math.abs(amount);
+  }
+  return { earned, spent, stars, targetMin: 30000, targetMax: 70000, net: earned - spent };
+}
+
+async function attachEconomy(snapshot, uid) {
+  if (snapshot && typeof snapshot === 'object') snapshot.economy = await economySummary(uid).catch(() => ({ earned: 0, spent: 0, stars: 0, targetMin: 30000, targetMax: 70000, net: 0 }));
+  return snapshot;
+}
 
 async function normalizeSpinDrop(user, payload) {
   const oldItem = payload?.event?.drop;
@@ -725,13 +772,62 @@ async function shopBuy(user, payload) {
   return snapshot;
 }
 
+async function createStarInvoice(user, payload, req) {
+  const productId = String(payload.product_id || '');
+  const product = starProducts[productId];
+  if (!product) throw new Error('Товар Stars не найден');
+  const uid = Number(user.id);
+  const players = await supabase('players', { query: `?telegram_id=eq.${uid}&select=upgrades,blocked` });
+  const player = players?.[0];
+  if (!player) throw new Error('Профиль не найден');
+  if (player.blocked) throw new Error('Account is blocked');
+  const cosmetics = player.upgrades?.cosmetics || {};
+  if (cosmetics.owned?.[productId]) throw new Error('Косметика уже куплена');
+  await ensurePaymentWebhook(req);
+  const orderId = crypto.randomUUID();
+  const order = { id: orderId, player_id: uid, product_id: productId, stars: product.stars, payload: orderId, status: 'pending' };
+  await supabase('star_orders', { method: 'POST', body: order });
+  try {
+    const invoiceLink = await telegramApi('createInvoiceLink', {
+      title: product.title, description: product.description, payload: orderId,
+      currency: 'XTR', prices: [{ label: product.title, amount: product.stars }]
+    });
+    return { invoiceLink, orderId, product: { id: productId, title: product.title, stars: product.stars } };
+  } catch (error) {
+    await supabase('star_orders', { method: 'PATCH', query: `?id=eq.${orderId}&status=eq.pending`, body: { status: 'cancelled' } }).catch(() => {});
+    throw error;
+  }
+}
+
+async function equipCosmetic(user, payload) {
+  const productId = String(payload.product_id || '');
+  const product = starProducts[productId];
+  if (!product) throw new Error('Косметика не найдена');
+  const uid = Number(user.id);
+  const rows = await supabase('players', { query: `?telegram_id=eq.${uid}&select=upgrades` });
+  const player = rows?.[0];
+  if (!player) throw new Error('Профиль не найден');
+  const upgrades = player.upgrades && typeof player.upgrades === 'object' ? player.upgrades : {};
+  const cosmetics = upgrades.cosmetics && typeof upgrades.cosmetics === 'object' ? upgrades.cosmetics : {};
+  if (!cosmetics.owned?.[productId]) throw new Error('Сначала купи эту косметику');
+  const nextCosmetics = { ...cosmetics, active: { ...(cosmetics.active || {}), ...product.grants } };
+  const updated = await supabase('players', { method: 'PATCH', query: `?telegram_id=eq.${uid}`, body: { upgrades: { ...upgrades, cosmetics: nextCosmetics } } });
+  if (!updated?.length) throw new Error('Не удалось применить косметику');
+  return attachEconomy(await rpc('player_snapshot', { p_id: uid }), uid);
+}
+
+async function economyStatus(user) {
+  const uid = Number(user.id);
+  return attachEconomy(await rpc('player_snapshot', { p_id: uid }), uid);
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'POST required' });
   try {
     const user = verifyTelegram(req.headers['x-telegram-init-data']);
     const body = await readBody(req);
     const action = String(body.action || 'bootstrap');
-    const allowed = new Set(['bootstrap', 'spin', 'pve_fight', 'battle_start', 'battle_turn', 'pvp_targets', 'pvp_match', 'pvp_online', 'pet_upgrade', 'claim_pvp_league', 'survivor_start', 'survivor_finish', 'claim_daily', 'claim_mission', 'buy_upgrade', 'upgrade_item', 'aura_upgrade', 'evolve_item', 'shop_buy', 'item_action', 'claim_achievement', 'claim_league', 'rescue', 'open_chest', 'claim_season', 'claim_weekly', 'redeem_promo', 'referral_info', 'tournament_join']);
+    const allowed = new Set(['bootstrap', 'spin', 'pve_fight', 'battle_start', 'battle_turn', 'pvp_targets', 'pvp_match', 'pvp_online', 'pet_upgrade', 'claim_pvp_league', 'survivor_start', 'survivor_finish', 'claim_daily', 'claim_mission', 'buy_upgrade', 'upgrade_item', 'aura_upgrade', 'evolve_item', 'shop_buy', 'star_invoice', 'cosmetic_equip', 'economy_status', 'item_action', 'claim_achievement', 'claim_league', 'rescue', 'open_chest', 'claim_season', 'claim_weekly', 'redeem_promo', 'referral_info', 'tournament_join']);
     if (!allowed.has(action)) return json(res, 400, { ok: false, error: 'Unknown action' });
     if (action === 'upgrade_item') {
       const payload = await upgradeItem(user, body.payload || {});
@@ -740,7 +836,14 @@ module.exports = async function handler(req, res) {
     }
     if (action === 'aura_upgrade' || action === 'evolve_item' || action === 'shop_buy') {
       const payload = action === 'aura_upgrade' ? await auraUpgrade(user) : action === 'evolve_item' ? await evolveItem(user, body.payload || {}) : await shopBuy(user, body.payload || {});
+      await attachEconomy(payload, Number(user.id));
       if (payload && typeof payload === 'object') payload.bot_username = process.env.TELEGRAM_BOT_USERNAME || '';
+      return json(res, 200, { ok: true, data: payload });
+    }
+    if (action === 'star_invoice') return json(res, 200, { ok: true, data: await createStarInvoice(user, body.payload || {}, req) });
+    if (action === 'cosmetic_equip' || action === 'economy_status') {
+      const payload = action === 'cosmetic_equip' ? await equipCosmetic(user, body.payload || {}) : await economyStatus(user);
+      payload.bot_username = process.env.TELEGRAM_BOT_USERNAME || '';
       return json(res, 200, { ok: true, data: payload });
     }
     if (action === 'pve_fight') {
@@ -779,6 +882,7 @@ module.exports = async function handler(req, res) {
       p_is_owner: isOwner(user)
     });
     if (action === 'spin') payload = await normalizeSpinDrop(user, payload);
+    if (action === 'bootstrap') await attachEconomy(payload, Number(user.id));
     if (payload && typeof payload === 'object') payload.bot_username = process.env.TELEGRAM_BOT_USERNAME || '';
     return json(res, 200, { ok: true, data: payload });
   } catch (error) {
