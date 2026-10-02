@@ -21,6 +21,8 @@ The PvE page offers five bot classes with distinct combat abilities and a server
 
 Online PvP adds a live matchmaking queue, synchronized alternating turns and a shared result for both players. PvP rating advances through Bronze, Silver, Gold, Diamond, Master and Legend with monthly rewards. Players on a win streak carry a visible Bounty that is paid to the winner. Dragon Pet now has ten separate levels, evolving rarity, an increasing combat ability and a dedicated hero card.
 
+Auras now have ten levels, evolving visual tiers and passive attack, defense and critical bonuses. The five-piece Cyber Sovereign set unlocks cumulative bonuses at 2/3/4/5 owned pieces and a full-set hero effect. Every item supports three server-saved evolution ranks that consume duplicates and Coins while increasing Power, combat stats and appearance. The Items screen also includes a server-backed shop for weapons, armor, pets, auras, materials and a monthly seasonal skin.
+
 ## Setup
 
 1. Create a Supabase project and run `supabase/schema.sql` in its SQL editor.

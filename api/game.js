@@ -10,6 +10,16 @@ const combatItems = {
   crown: { basePower: 1850, stats: { hp: 650, crit: 7 } },
   secret: { basePower: 2850, stats: { hp: 800, attack: 420, defense: 320, speed: 14, crit: 8, critDamage: 45 } }
 };
+const setItemIds = ['sword', 'block', 'pet', 'crystal', 'crown'];
+const shopOffers = {
+  starter_weapon: { itemId: 'sword', count: 1, price: 2500 },
+  cyber_armor: { itemId: 'block', count: 1, price: 1800 },
+  dragon_egg: { itemId: 'pet', count: 1, price: 7500 },
+  void_aura: { itemId: 'crystal', count: 1, price: 15000 },
+  royal_crown: { itemId: 'crown', count: 1, price: 35000 },
+  evolution_pack: { itemId: 'sword', count: 2, price: 8000 },
+  seasonal_skin: { itemId: 'secret', count: 1, price: 125000, seasonal: true }
+};
 const pveEnemies = {
   tank: { name: 'Железный танк', type: 'tank', power: 2600, reward: [200, 650], xp: 50 },
   assassin: { name: 'Теневой клинок', type: 'assassin', power: 4200, reward: [450, 1100], xp: 75 },
@@ -97,20 +107,26 @@ function calculateHeroStats(player, inventory) {
   const equippedId = inventory.some(row => row.item_id === player.equipped_id && Number(row.count) > 0) ? player.equipped_id : '';
   const equipped = combatItems[equippedId];
   const itemLevel = Math.max(1, Math.min(10, Number(itemLevels[equippedId]) || 1));
-  const scale = 1 + (itemLevel - 1) * 0.15;
+  const evolution = Math.max(0, Math.min(3, Number(upgrades?.evolutions?.[equippedId]) || 0));
+  const scale = (1 + (itemLevel - 1) * 0.15) * (1 + evolution * 0.35);
   const bonus = Object.fromEntries(Object.entries(equipped?.stats || {}).map(([key, value]) => [key, Math.round(value * scale)]));
   const luck = Number(upgrades.luck) || 0;
   const xpBoost = Number(upgrades.xp) || 0;
   const pet = petProfile(upgrades, inventory);
-  const hp = 1200 + (level - 1) * 200 + owned * 40 + (bonus.hp || 0);
-  const attack = 420 + (level - 1) * 80 + luck * 25 + (bonus.attack || 0) + pet.attack;
-  const defense = 300 + (level - 1) * 55 + owned * 30 + (bonus.defense || 0);
+  const auraLevel = inventory.some(row => row.item_id === 'crystal' && Number(row.count) > 0) ? Math.max(1, Math.min(10, Number(upgrades?.aura?.level) || 1)) : 0;
+  const setParts = setItemIds.filter(id => inventory.some(row => row.item_id === id && Number(row.count) > 0)).length;
+  const setHp = setParts >= 4 ? 400 : 0;
+  const setAttack = setParts >= 2 ? 100 : 0;
+  const setDefense = setParts >= 3 ? 140 : 0;
+  const hp = 1200 + (level - 1) * 200 + owned * 40 + (bonus.hp || 0) + setHp;
+  const attack = 420 + (level - 1) * 80 + luck * 25 + (bonus.attack || 0) + pet.attack + auraLevel * 30 + setAttack;
+  const defense = 300 + (level - 1) * 55 + owned * 30 + (bonus.defense || 0) + auraLevel * 25 + setDefense;
   const speed = 100 + Math.min(60, (level - 1) * 2) + xpBoost * 3 + (bonus.speed || 0) + pet.speed;
-  const crit = Math.min(60, 5 + luck * 3 + Math.floor(level / 5) + (bonus.crit || 0));
+  const crit = Math.min(60, 5 + luck * 3 + Math.floor(level / 5) + (bonus.crit || 0) + Math.floor(auraLevel / 2) + (setParts >= 5 ? 5 : 0));
   const critDamage = 150 + xpBoost * 8 + (bonus.critDamage || 0);
-  const itemPower = equipped ? Math.round(equipped.basePower * (1 + (itemLevel - 1) * 0.18)) : 0;
+  const itemPower = equipped ? Math.round(equipped.basePower * (1 + (itemLevel - 1) * 0.18) * (1 + evolution * 0.4)) : 0;
   const power = Math.round(hp * 0.45 + attack * 2.2 + defense * 1.25 + speed * 5 + crit * 45 + critDamage * 8 + itemPower);
-  return { hp, attack, defense, speed, crit, critDamage, power, petLevel: pet.level, petDamageBonus: pet.damageBonus };
+  return { hp, attack, defense, speed, crit, critDamage, power, petLevel: pet.level, petDamageBonus: pet.damageBonus, auraLevel, setParts, evolution };
 }
 
 const calculateHeroPower = (player, inventory) => calculateHeroStats(player, inventory).power;
@@ -606,16 +622,124 @@ async function upgradeItem(user, payload) {
   return rpc('player_snapshot', { p_id: uid });
 }
 
+async function auraUpgrade(user) {
+  const uid = Number(user.id);
+  const [players, inventory] = await Promise.all([
+    supabase('players', { query: `?telegram_id=eq.${uid}&select=balance,upgrades` }),
+    supabase('inventory', { query: `?player_id=eq.${uid}&item_id=eq.crystal&count=gt.0&select=count` })
+  ]);
+  const player = players?.[0];
+  if (!player || !inventory?.[0]) throw new Error('Сначала получи ауру Void Crystal');
+  const upgrades = player.upgrades && typeof player.upgrades === 'object' ? player.upgrades : {};
+  const level = Math.max(1, Math.min(10, Number(upgrades?.aura?.level) || 1));
+  if (level >= 10) throw new Error('Аура уже максимального уровня');
+  const balance = Number(player.balance) || 0;
+  const cost = level * 1200;
+  if (balance < cost) throw new Error('Недостаточно Blox Coins');
+  const nextUpgrades = { ...upgrades, aura: { ...(upgrades.aura || {}), level: level + 1 } };
+  const updated = await supabase('players', {
+    method: 'PATCH', query: `?telegram_id=eq.${uid}&balance=eq.${balance}`,
+    body: { balance: balance - cost, upgrades: nextUpgrades }
+  });
+  if (!updated?.length) throw new Error('Профиль изменился, повтори попытку');
+  const snapshot = await rpc('player_snapshot', { p_id: uid });
+  snapshot.event = { status: 'aura_upgraded', level: level + 1 };
+  return snapshot;
+}
+
+async function evolveItem(user, payload) {
+  const itemId = String(payload.item_id || '');
+  if (!combatItems[itemId]) throw new Error('Предмет нельзя эволюционировать');
+  const uid = Number(user.id);
+  const [players, rows] = await Promise.all([
+    supabase('players', { query: `?telegram_id=eq.${uid}&select=balance,upgrades` }),
+    supabase('inventory', { query: `?player_id=eq.${uid}&item_id=eq.${encodeURIComponent(itemId)}&count=gt.0&select=count` })
+  ]);
+  const player = players?.[0], row = rows?.[0];
+  if (!player || !row) throw new Error('Предмет не найден');
+  const upgrades = player.upgrades && typeof player.upgrades === 'object' ? player.upgrades : {};
+  const evolutions = upgrades.evolutions && typeof upgrades.evolutions === 'object' ? upgrades.evolutions : {};
+  const rank = Math.max(0, Math.min(3, Number(evolutions[itemId]) || 0));
+  if (rank >= 3) throw new Error('Достигнута высшая эволюция');
+  const duplicates = rank + 2;
+  const count = Number(row.count) || 0;
+  const cost = itemUpgradeBase[itemId] * (rank + 1) * 8;
+  const balance = Number(player.balance) || 0;
+  if (count < duplicates + 1) throw new Error(`Нужно дубликатов: ${duplicates}`);
+  if (balance < cost) throw new Error('Недостаточно Blox Coins');
+  const inventoryUpdate = await supabase('inventory', {
+    method: 'PATCH', query: `?player_id=eq.${uid}&item_id=eq.${encodeURIComponent(itemId)}&count=eq.${count}`,
+    body: { count: count - duplicates }
+  });
+  if (!inventoryUpdate?.length) throw new Error('Инвентарь изменился, повтори попытку');
+  const nextUpgrades = { ...upgrades, evolutions: { ...evolutions, [itemId]: rank + 1 } };
+  const updated = await supabase('players', {
+    method: 'PATCH', query: `?telegram_id=eq.${uid}&balance=eq.${balance}`,
+    body: { balance: balance - cost, upgrades: nextUpgrades }
+  });
+  if (!updated?.length) {
+    await supabase('inventory', { method: 'PATCH', query: `?player_id=eq.${uid}&item_id=eq.${encodeURIComponent(itemId)}&count=eq.${count - duplicates}`, body: { count } }).catch(() => {});
+    throw new Error('Профиль изменился, повтори попытку');
+  }
+  const snapshot = await rpc('player_snapshot', { p_id: uid });
+  snapshot.event = { status: 'item_evolved', item_id: itemId, rank: rank + 1 };
+  return snapshot;
+}
+
+async function shopBuy(user, payload) {
+  const offerId = String(payload.offer_id || '');
+  const offer = shopOffers[offerId];
+  if (!offer) throw new Error('Предложение не найдено');
+  const uid = Number(user.id);
+  const [players, rows] = await Promise.all([
+    supabase('players', { query: `?telegram_id=eq.${uid}&select=balance,upgrades` }),
+    supabase('inventory', { query: `?player_id=eq.${uid}&item_id=eq.${encodeURIComponent(offer.itemId)}&select=count` })
+  ]);
+  const player = players?.[0];
+  if (!player) throw new Error('Профиль не найден');
+  const balance = Number(player.balance) || 0;
+  if (balance < offer.price) throw new Error('Недостаточно Blox Coins');
+  const upgrades = player.upgrades && typeof player.upgrades === 'object' ? player.upgrades : {};
+  const purchases = upgrades.shopPurchases && typeof upgrades.shopPurchases === 'object' ? upgrades.shopPurchases : {};
+  const seasonKey = new Date().toISOString().slice(0, 7);
+  const purchaseKey = offer.seasonal ? `${offerId}_${seasonKey}` : '';
+  if (purchaseKey && purchases[purchaseKey]) throw new Error('Сезонное предложение уже куплено');
+  const nextUpgrades = purchaseKey ? { ...upgrades, shopPurchases: { ...purchases, [purchaseKey]: true } } : upgrades;
+  const updated = await supabase('players', {
+    method: 'PATCH', query: `?telegram_id=eq.${uid}&balance=eq.${balance}`,
+    body: { balance: balance - offer.price, upgrades: nextUpgrades }
+  });
+  if (!updated?.length) throw new Error('Профиль изменился, повтори покупку');
+  const oldCount = Number(rows?.[0]?.count) || 0;
+  try {
+    await supabase('inventory', {
+      method: 'POST', query: '?on_conflict=player_id,item_id', prefer: 'resolution=merge-duplicates,return=representation',
+      body: { player_id: uid, item_id: offer.itemId, count: oldCount + offer.count, discovered: true }
+    });
+  } catch (error) {
+    await supabase('players', { method: 'PATCH', query: `?telegram_id=eq.${uid}&balance=eq.${balance - offer.price}`, body: { balance, upgrades } }).catch(() => {});
+    throw error;
+  }
+  const snapshot = await rpc('player_snapshot', { p_id: uid });
+  snapshot.event = { status: 'shop_purchase', offer_id: offerId, item_id: offer.itemId, count: offer.count };
+  return snapshot;
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { ok: false, error: 'POST required' });
   try {
     const user = verifyTelegram(req.headers['x-telegram-init-data']);
     const body = await readBody(req);
     const action = String(body.action || 'bootstrap');
-    const allowed = new Set(['bootstrap', 'spin', 'pve_fight', 'battle_start', 'battle_turn', 'pvp_targets', 'pvp_match', 'pvp_online', 'pet_upgrade', 'claim_pvp_league', 'survivor_start', 'survivor_finish', 'claim_daily', 'claim_mission', 'buy_upgrade', 'upgrade_item', 'item_action', 'claim_achievement', 'claim_league', 'rescue', 'open_chest', 'claim_season', 'claim_weekly', 'redeem_promo', 'referral_info', 'tournament_join']);
+    const allowed = new Set(['bootstrap', 'spin', 'pve_fight', 'battle_start', 'battle_turn', 'pvp_targets', 'pvp_match', 'pvp_online', 'pet_upgrade', 'claim_pvp_league', 'survivor_start', 'survivor_finish', 'claim_daily', 'claim_mission', 'buy_upgrade', 'upgrade_item', 'aura_upgrade', 'evolve_item', 'shop_buy', 'item_action', 'claim_achievement', 'claim_league', 'rescue', 'open_chest', 'claim_season', 'claim_weekly', 'redeem_promo', 'referral_info', 'tournament_join']);
     if (!allowed.has(action)) return json(res, 400, { ok: false, error: 'Unknown action' });
     if (action === 'upgrade_item') {
       const payload = await upgradeItem(user, body.payload || {});
+      if (payload && typeof payload === 'object') payload.bot_username = process.env.TELEGRAM_BOT_USERNAME || '';
+      return json(res, 200, { ok: true, data: payload });
+    }
+    if (action === 'aura_upgrade' || action === 'evolve_item' || action === 'shop_buy') {
+      const payload = action === 'aura_upgrade' ? await auraUpgrade(user) : action === 'evolve_item' ? await evolveItem(user, body.payload || {}) : await shopBuy(user, body.payload || {});
       if (payload && typeof payload === 'object') payload.bot_username = process.env.TELEGRAM_BOT_USERNAME || '';
       return json(res, 200, { ok: true, data: payload });
     }
