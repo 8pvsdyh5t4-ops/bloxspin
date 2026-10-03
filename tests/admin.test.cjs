@@ -1,0 +1,4 @@
+const {test}=require('node:test'),assert=require('node:assert/strict');
+const {validateAdmin}=require('../api/_validation');
+test('crystal-only, item-only and cosmetic-only promos are supported',()=>{for(const reward of [{reward_crystals:5},{reward_item:'sword',reward_item_count:1},{reward_cosmetic:'neon_frame'}])assert.equal(validateAdmin('create_promo',{code:' free ',...reward}).code,'FREE')});
+test('invalid grants and empty promos cannot reach the database',()=>{for(const payload of [{code:'ABC'},{code:'ABC',reward:-1},{code:'ABC',reward_item:'hacked',reward_item_count:1},{code:'ABC',reward_item:'sword'},{code:'ABC',reward:1,starts_at:'bad'}])assert.throws(()=>validateAdmin('create_promo',payload));assert.throws(()=>validateAdmin('grant_coins',{telegram_id:1,amount:Infinity}));assert.throws(()=>validateAdmin('set_blocked',{telegram_id:1,blocked:'false'}))});

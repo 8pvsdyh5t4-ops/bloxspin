@@ -1211,3 +1211,5 @@ module.exports = async function handler(req, res) {
     return json(res, status, { ok: false, error: error.message });
   }
 };
+
+module.exports = require('./_request').protectedHandler(module.exports);
