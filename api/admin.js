@@ -1,17 +1,19 @@
 const { json, readBody, verifyTelegram, isOwner, rpc, publicUser } = require('./_lib');
+const { validateAdmin } = require('./_validation');
 
 module.exports = async function handler(req, res) {
+  if (!['GET','POST'].includes(req.method)) return json(res,405,{ok:false,error:'GET or POST required'});
   try {
     const user = verifyTelegram(req.headers['x-telegram-init-data']);
     if (!isOwner(user)) return json(res, 403, { ok: false, error: 'Owner access required' });
     const body = req.method === 'POST' ? await readBody(req) : {};
     const action = req.method === 'GET' ? 'overview' : String(body.action || 'overview');
-    const allowed = new Set(['overview', 'grant_coins', 'grant_item', 'set_blocked', 'create_promo', 'set_config', 'create_tournament']);
+    const allowed = new Set(['overview', 'grant_coins', 'grant_crystals', 'grant_item', 'set_blocked', 'create_promo', 'set_promo_active', 'set_tournament_active', 'set_config', 'create_tournament']);
     if (!allowed.has(action)) return json(res, 400, { ok: false, error: 'Unknown admin action' });
     const data = await rpc('admin_action', {
       p_admin: publicUser(user),
       p_action: action,
-      p_payload: body.payload || {}
+      p_payload: validateAdmin(action, body.payload || {})
     });
     return json(res, 200, { ok: true, data });
   } catch (error) {
@@ -19,3 +21,5 @@ module.exports = async function handler(req, res) {
     return json(res, status, { ok: false, error: error.message });
   }
 };
+
+module.exports = require('./_request').protectedHandler(module.exports, {admin:true});
