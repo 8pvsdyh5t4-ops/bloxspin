@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const equipmentRules = require('../equipment');
 const { json, readBody, verifyTelegram, isOwner, supabase, rpc, publicUser } = require('./_lib');
 
 const itemUpgradeBase = { block: 50, sword: 150, pet: 400, crystal: 900, crown: 2000, secret: 5000, eclipse_blade: 3200, nova_pet: 4200, void_relic: 6500 };
@@ -186,12 +187,9 @@ function calculateHeroStats(player, inventory) {
   const itemLevels = upgrades.itemLevels && typeof upgrades.itemLevels === 'object' ? upgrades.itemLevels : {};
   const level = Math.max(1, Number(player.level) || 1);
   const owned = inventory.filter(row => Number(row.count) > 0).length;
-  const equippedId = inventory.some(row => row.item_id === player.equipped_id && Number(row.count) > 0) ? player.equipped_id : '';
-  const equipped = combatItems[equippedId];
-  const itemLevel = Math.max(1, Math.min(10, Number(itemLevels[equippedId]) || 1));
-  const evolution = Math.max(0, Math.min(3, Number(upgrades?.evolutions?.[equippedId]) || 0));
-  const scale = (1 + (itemLevel - 1) * 0.15) * (1 + evolution * 0.35);
-  const bonus = Object.fromEntries(Object.entries(equipped?.stats || {}).map(([key, value]) => [key, Math.round(value * scale)]));
+  const equipment = equipmentRules.bonuses(player.player_equipment ?? player.equipment, inventory, upgrades, combatItems, player.equipped_id);
+  const bonus = equipment.stats;
+  const evolution = Math.max(0, ...Object.values(equipment.loadout).map(id => Math.min(3, Number(upgrades?.evolutions?.[id]) || 0)));
   const luck = Number(upgrades.luck) || 0;
   const xpBoost = Number(upgrades.xp) || 0;
   const pet = petProfile(upgrades, inventory);
@@ -206,9 +204,9 @@ function calculateHeroStats(player, inventory) {
   const speed = 100 + Math.min(60, (level - 1) * 2) + xpBoost * 3 + (bonus.speed || 0) + pet.speed;
   const crit = Math.min(60, 5 + luck * 3 + Math.floor(level / 5) + (bonus.crit || 0) + Math.floor(auraLevel / 2) + (setParts >= 5 ? 5 : 0));
   const critDamage = 150 + xpBoost * 8 + (bonus.critDamage || 0);
-  const itemPower = equipped ? Math.round(equipped.basePower * (1 + (itemLevel - 1) * 0.18) * (1 + evolution * 0.4)) : 0;
+  const itemPower = equipment.power;
   const power = Math.round(hp * 0.45 + attack * 2.2 + defense * 1.25 + speed * 5 + crit * 45 + critDamage * 8 + itemPower);
-  return { hp, attack, defense, speed, crit, critDamage, power, petLevel: pet.level, petDamageBonus: pet.damageBonus, auraLevel, setParts, evolution };
+  return { hp, attack, defense, speed, crit, critDamage, power, petLevel: pet.level, petDamageBonus: pet.damageBonus, auraLevel, setParts, evolution, equipment: equipment.loadout };
 }
 
 const calculateHeroPower = (player, inventory) => calculateHeroStats(player, inventory).power;
@@ -219,7 +217,7 @@ async function pveFight(user, payload) {
   if (!enemy) throw new Error('Invalid PvE enemy');
   const uid = Number(user.id);
   const [players, inventory] = await Promise.all([
-    supabase('players', { query: `?telegram_id=eq.${uid}&select=balance,level,xp,equipped_id,upgrades,blocked` }),
+    supabase('players', { query: `?telegram_id=eq.${uid}&select=balance,level,xp,equipped_id,upgrades,blocked,player_equipment(slot,item_id)` }),
     supabase('inventory', { query: `?player_id=eq.${uid}&count=gt.0&select=item_id,count` })
   ]);
   const player = players?.[0];
@@ -307,7 +305,7 @@ async function battleStart(user, payload) {
   const uid = Number(user.id);
   const mode = ['tower', 'boss'].includes(payload.mode) ? payload.mode : 'pve';
   const [players, inventory] = await Promise.all([
-    supabase('players', { query: `?telegram_id=eq.${uid}&select=balance,level,xp,equipped_id,upgrades,blocked` }),
+    supabase('players', { query: `?telegram_id=eq.${uid}&select=balance,level,xp,equipped_id,upgrades,blocked,player_equipment(slot,item_id)` }),
     supabase('inventory', { query: `?player_id=eq.${uid}&count=gt.0&select=item_id,count` })
   ]);
   const player = players?.[0];
@@ -332,15 +330,15 @@ async function battleStart(user, payload) {
 
 async function pvpTargets(user) {
   const uid = Number(user.id);
-  const candidates = await supabase('players', { query: `?telegram_id=neq.${uid}&blocked=eq.false&select=telegram_id,display_name,photo_url,level,equipped_id,upgrades,last_seen&order=last_seen.desc&limit=12` });
+  const candidates = await supabase('players', { query: `?telegram_id=neq.${uid}&blocked=eq.false&select=telegram_id,display_name,photo_url,level,equipped_id,upgrades,last_seen,player_equipment(slot,item_id)&order=last_seen.desc&limit=12` });
   const targets = await Promise.all((candidates || []).map(async opponent => {
     const inventory = await supabase('inventory', { query: `?player_id=eq.${Number(opponent.telegram_id)}&count=gt.0&select=item_id,count` });
     const stats = calculateHeroStats(opponent, inventory || []);
     const rating = pvpRating(opponent.upgrades);
-    return { id: String(opponent.telegram_id), name: opponent.display_name || 'Игрок', photo: opponent.photo_url || '', level: Number(opponent.level) || 1, equipment: opponent.equipped_id || '', power: stats.power, rating, league: pvpLeague(rating).id, streak: Number(opponent.upgrades?.pvp?.streak) || 0, bounty: pvpBounty(opponent.upgrades), online: Date.now() - new Date(opponent.last_seen || 0).getTime() < 120000 };
+    return { id: String(opponent.telegram_id), name: opponent.display_name || 'Игрок', photo: opponent.photo_url || '', level: Number(opponent.level) || 1, equipment: opponent.equipped_id || '', loadout: stats.equipment, power: stats.power, rating, league: pvpLeague(rating).id, streak: Number(opponent.upgrades?.pvp?.streak) || 0, bounty: pvpBounty(opponent.upgrades), online: Date.now() - new Date(opponent.last_seen || 0).getTime() < 120000 };
   }));
   if (targets.length < 3) {
-    const ownRows = await supabase('players', { query: `?telegram_id=eq.${uid}&select=level,equipped_id,upgrades` });
+    const ownRows = await supabase('players', { query: `?telegram_id=eq.${uid}&select=level,equipped_id,upgrades,player_equipment(slot,item_id)` });
     const ownInventory = await supabase('inventory', { query: `?player_id=eq.${uid}&count=gt.0&select=item_id,count` });
     const ownPower = calculateHeroPower(ownRows?.[0] || { level: 1, upgrades: {} }, ownInventory || []);
     for (const bot of pvpBots.slice(0, 3 - targets.length)) targets.push({ id: bot.id, name: bot.display_name, photo: '', level: bot.level, equipment: bot.equipped_id, power: Math.round(ownPower * bot.powerScale), rating: 1000, league: 'Bronze', streak: 0, bounty: 0, online: false, training: true });
@@ -353,9 +351,9 @@ async function pvpTargets(user) {
 async function pvpMatch(user, payload = {}) {
   const uid = Number(user.id);
   const [players, inventory, candidates] = await Promise.all([
-    supabase('players', { query: `?telegram_id=eq.${uid}&select=balance,level,xp,equipped_id,upgrades,blocked` }),
+    supabase('players', { query: `?telegram_id=eq.${uid}&select=balance,level,xp,equipped_id,upgrades,blocked,player_equipment(slot,item_id)` }),
     supabase('inventory', { query: `?player_id=eq.${uid}&count=gt.0&select=item_id,count` }),
-    supabase('players', { query: `?telegram_id=neq.${uid}&blocked=eq.false&select=telegram_id,display_name,photo_url,level,equipped_id,upgrades,last_seen&limit=20` })
+    supabase('players', { query: `?telegram_id=neq.${uid}&blocked=eq.false&select=telegram_id,display_name,photo_url,level,equipped_id,upgrades,last_seen,player_equipment(slot,item_id)&limit=20` })
   ]);
   const player = players?.[0];
   if (!player) throw new Error('Player not found');
@@ -380,7 +378,7 @@ async function pvpMatch(user, payload = {}) {
   if (selectedBot) rival.power = Math.round(hero.power * selectedBot.powerScale);
   const enemy = { id: `pvp_${opponent.telegram_id}`, name: opponent.display_name || 'Соперник', type: 'assassin', power: rival.power, reward: [700, 1800], xp: 120 };
   const battle = createBattleState(hero, enemy, inventory || [], 'pvp');
-  Object.assign(battle, { opponentId: selectedBot?.id || String(opponent.telegram_id), opponentLevel: Number(opponent.level) || 1, opponentEquipment: opponent.equipped_id || '', opponentPhoto: opponent.photo_url || '', opponentOnline: selectedBot ? false : Date.now() - new Date(opponent.last_seen || 0).getTime() < 120000, opponentRating: pvpRating(opponent.upgrades), opponentLeague: pvpLeague(pvpRating(opponent.upgrades)).id, opponentBounty: selectedBot ? 0 : pvpBounty(opponent.upgrades), training: Boolean(selectedBot) });
+  Object.assign(battle, { opponentId: selectedBot?.id || String(opponent.telegram_id), opponentLevel: Number(opponent.level) || 1, opponentEquipment: opponent.equipped_id || '', opponentLoadout: rival.equipment, opponentPhoto: opponent.photo_url || '', opponentOnline: selectedBot ? false : Date.now() - new Date(opponent.last_seen || 0).getTime() < 120000, opponentRating: pvpRating(opponent.upgrades), opponentLeague: pvpLeague(pvpRating(opponent.upgrades)).id, opponentBounty: selectedBot ? 0 : pvpBounty(opponent.upgrades), training: Boolean(selectedBot) });
   const upgrades = player.upgrades && typeof player.upgrades === 'object' ? player.upgrades : {};
   const updated = await supabase('players', { method: 'PATCH', query: `?telegram_id=eq.${uid}&balance=eq.${Number(player.balance) || 0}&xp=eq.${Number(player.xp) || 0}`, body: { upgrades: { ...upgrades, battle } } });
   if (!updated?.length) throw new Error('Profile changed, try again');
@@ -530,7 +528,7 @@ async function onlinePvp(user, payload = {}) {
     match = await rpc('commit_online_pvp_turn', {p_match:match.id,p_version:Number(match.version)||1,p_actor:uid,p_state:state,p_finished:finished});
   } else if (!match && command === 'join') {
     const [players, inventory] = await Promise.all([
-      supabase('players', { query: `?telegram_id=eq.${uid}&select=telegram_id,display_name,photo_url,level,equipped_id,upgrades,blocked` }),
+      supabase('players', { query: `?telegram_id=eq.${uid}&select=telegram_id,display_name,photo_url,level,equipped_id,upgrades,blocked,player_equipment(slot,item_id)` }),
       supabase('inventory', { query: `?player_id=eq.${uid}&count=gt.0&select=item_id,count` })
     ]);
     const player = players?.[0];
@@ -962,7 +960,7 @@ async function clanAction(user, action, payload = {}) {
     const state = await clanState(user), raid = state.raid;
     if (!raid || raid.status !== 'active') throw new Error('Рейд уже завершён');
     if (raid.myAttacksToday >= 3) throw new Error('Сегодня использованы 3 атаки');
-    const [players, inventory] = await Promise.all([supabase('players', { query: `?telegram_id=eq.${uid}&select=level,upgrades,equipped_id` }), supabase('inventory', { query: `?player_id=eq.${uid}&count=gt.0&select=item_id,count` })]);
+    const [players, inventory] = await Promise.all([supabase('players', { query: `?telegram_id=eq.${uid}&select=level,upgrades,equipped_id,player_equipment(slot,item_id)` }), supabase('inventory', { query: `?player_id=eq.${uid}&count=gt.0&select=item_id,count` })]);
     const damage = Math.max(1000, Math.round(calculateHeroPower(players[0], inventory || []) * (0.8 + crypto.randomInt(41) / 100)));
     const hp = Math.max(0, Number(raid.current_hp) - damage);
     const updated = await supabase('clan_raids', { method: 'PATCH', query: `?id=eq.${raid.id}&current_hp=eq.${raid.current_hp}&status=eq.active`, body: { current_hp: hp, status: hp ? 'active' : 'defeated', defeated_at: hp ? null : new Date().toISOString() } });
@@ -1133,6 +1131,10 @@ module.exports = async function handler(req, res) {
       const payload = await survivorAction(user, body.payload || {}, action === 'survivor_finish');
       if (payload && typeof payload === 'object') payload.bot_username = process.env.TELEGRAM_BOT_USERNAME || '';
       return json(res, 200, { ok: true, data: payload });
+    }
+    if (action === 'item_action' && body.payload?.mode === 'equip') {
+      const payload = await rpc('toggle_equipment_item', {p_id: Number(user.id), p_item: String(body.payload.item_id || '')});
+      return json(res, 200, {ok: true, data: payload});
     }
     let payload = await rpc(action === 'bootstrap' ? 'bootstrap_player' : 'game_action', action === 'bootstrap' ? {
       p_user: publicUser(user),
