@@ -474,22 +474,13 @@ async function battleTurn(user, payload) {
       crystalReward = victory ? (battle.seasonal ? 5 : 2) : 0;
     }
   }
-  const updated = await supabase('players', {
-    method: 'PATCH',
-    query: `?telegram_id=eq.${uid}&balance=eq.${balance}&crystals=eq.${Number(player.crystals || 0)}&xp=eq.${xp}`,
-    body: { balance: balance + reward, crystals: Number(player.crystals || 0) + crystalReward, xp: xp + xpReward, upgrades: nextUpgrades }
+  return rpc('commit_player_reward', {
+    p_id: uid, p_expected: { balance: player.balance, xp: player.xp, crystals: player.crystals, upgrades: player.upgrades },
+    p_changes: { balance: balance + reward, crystals: Number(player.crystals || 0) + crystalReward, xp: xp + xpReward, upgrades: nextUpgrades },
+    p_item: drop || null, p_item_count: drop ? 1 : 0,
+    p_progress: victory ? battle.mode === 'tower' ? 'tower_floors' : battle.mode === 'pvp' ? 'pvp_wins' : 'bot_wins' : null,
+    p_event: { status: victory ? 'victory' : defeat ? 'defeat' : 'active', battle: victory || defeat ? null : battle, finishedBattle: victory || defeat ? battle : null, log, reward, xp: xpReward, crystals: crystalReward, drop }
   });
-  if (!updated?.length) throw new Error('Profile changed, try again');
-  if (drop) {
-    const rows = await supabase('inventory', { query: `?player_id=eq.${uid}&item_id=eq.${encodeURIComponent(drop)}&select=count` });
-    const count = Number(rows?.[0]?.count) || 0;
-    await supabase('inventory', { method: 'POST', query: '?on_conflict=player_id,item_id', prefer: 'resolution=merge-duplicates,return=representation', body: { player_id: uid, item_id: drop, count: count + 1, discovered: true } }).catch(() => { drop = ''; });
-  }
-  if (victory) await rpc('increment_daily_progress', { p_id: uid, p_field: battle.mode === 'tower' ? 'tower_floors' : battle.mode === 'pvp' ? 'pvp_wins' : 'bot_wins', p_amount: 1 });
-  if (victory || defeat) await rpc('apply_player_levels', { p_id: uid });
-  const snapshot = await rpc('player_snapshot', { p_id: uid });
-  snapshot.event = { status: victory ? 'victory' : defeat ? 'defeat' : 'active', battle: victory || defeat ? null : battle, finishedBattle: victory || defeat ? battle : null, log, reward, xp: xpReward, crystals: crystalReward, drop };
-  return snapshot;
 }
 
 const onlineMatchView = (row, uid) => {
@@ -500,21 +491,6 @@ const onlineMatchView = (row, uid) => {
   const opponent = state.players?.[String(opponentId)] || {};
   return { id: row.id, status: row.status, version: Number(row.version) || 1, turn: Number(state.turn), isMyTurn: Number(state.turn) === uid, winnerId: row.winner_id ? Number(row.winner_id) : 0, me, opponent: { ...opponent, id: opponentId }, log: state.log || [], reward: Number(state.rewards?.[String(uid)]) || 0, ratingChange: Number(state.ratingChanges?.[String(uid)]) || 0 };
 };
-
-async function updateOnlinePvpPlayer(playerId, victory, reward) {
-  const rows = await supabase('players', { query: `?telegram_id=eq.${playerId}&select=balance,xp,upgrades` });
-  const player = rows?.[0];
-  if (!player) return;
-  const upgrades = player.upgrades && typeof player.upgrades === 'object' ? player.upgrades : {};
-  const old = upgrades.pvp && typeof upgrades.pvp === 'object' ? upgrades.pvp : {};
-  const ratingChange = victory ? 30 : -20;
-  const rating = Math.max(0, (Number(old.rating) || 1000) + ratingChange);
-  const pvp = { ...old, matches: (Number(old.matches) || 0) + 1, wins: (Number(old.wins) || 0) + (victory ? 1 : 0), losses: (Number(old.losses) || 0) + (victory ? 0 : 1), streak: victory ? (Number(old.streak) || 0) + 1 : 0, bestStreak: Math.max(Number(old.bestStreak) || 0, victory ? (Number(old.streak) || 0) + 1 : 0), rating, league: pvpLeague(rating).id };
-  await supabase('players', { method: 'PATCH', query: `?telegram_id=eq.${playerId}&balance=eq.${Number(player.balance) || 0}&xp=eq.${Number(player.xp) || 0}`, body: { balance: Number(player.balance) + reward, xp: Number(player.xp) + (victory ? 160 : 45), upgrades: { ...upgrades, pvp } } });
-  await rpc('apply_player_levels', { p_id: playerId });
-  if (victory) await rpc('increment_daily_progress', { p_id: playerId, p_field: 'pvp_wins', p_amount: 1 });
-  return ratingChange;
-}
 
 async function onlinePvp(user, payload = {}) {
   const uid = Number(user.id);
@@ -551,12 +527,7 @@ async function onlinePvp(user, payload = {}) {
       state.rewards = { [String(uid)]: 1200 + bounty, [String(opponentId)]: 0 };
       state.ratingChanges = { [String(uid)]: 30, [String(opponentId)]: -20 };
     }
-    const updated = await supabase('pvp_matches', { method: 'PATCH', query: `?id=eq.${match.id}&status=eq.active&version=eq.${Number(match.version) || 1}`, body: { state, status: finished ? 'finished' : 'active', winner_id: finished ? uid : null, version: (Number(match.version) || 1) + 1, updated_at: new Date().toISOString() } });
-    if (!updated?.length) throw new Error('Ход уже изменился, обнови матч');
-    match = updated[0];
-    if (finished) {
-      await Promise.all([updateOnlinePvpPlayer(uid, true, Number(state.rewards[String(uid)])), updateOnlinePvpPlayer(opponentId, false, 0)]);
-    }
+    match = await rpc('commit_online_pvp_turn', {p_match:match.id,p_version:Number(match.version)||1,p_actor:uid,p_state:state,p_finished:finished});
   } else if (!match && command === 'join') {
     const [players, inventory] = await Promise.all([
       supabase('players', { query: `?telegram_id=eq.${uid}&select=telegram_id,display_name,photo_url,level,equipped_id,upgrades,blocked` }),
@@ -631,37 +602,24 @@ async function claimPvpLeague(user) {
 }
 
 async function survivorAction(user, payload, finish = false) {
-  const uid = Number(user.id);
-  const players = await supabase('players', { query: `?telegram_id=eq.${uid}&select=balance,xp,upgrades,blocked` });
-  const player = players?.[0];
-  if (!player) throw new Error('Player not found');
-  if (player.blocked) throw new Error('Account is blocked');
-  const upgrades = player.upgrades && typeof player.upgrades === 'object' ? player.upgrades : {};
-  if (!finish) {
-    const survivorSession = { startedAt: Date.now(), nonce: crypto.randomBytes(8).toString('hex') };
-    const updated = await supabase('players', { method: 'PATCH', query: `?telegram_id=eq.${uid}&balance=eq.${Number(player.balance) || 0}`, body: { upgrades: { ...upgrades, survivorSession } } });
-    if (!updated?.length) throw new Error('Profile changed, try again');
-    const snapshot = await rpc('player_snapshot', { p_id: uid });
-    snapshot.event = { status: 'started', nonce: survivorSession.nonce };
-    return snapshot;
+  const uid=Number(user.id), rows=await supabase('players',{query:`?telegram_id=eq.${uid}&select=balance,xp,upgrades,blocked`}),player=rows?.[0];
+  if(!player||player.blocked)throw new Error('Player unavailable');
+  const upgrades=player.upgrades||{};
+  if(!finish){
+    const survivorSession={startedAt:Date.now(),nonce:crypto.randomBytes(16).toString('hex')};
+    return rpc('commit_player_reward',{p_id:uid,p_expected:{upgrades:player.upgrades},p_changes:{upgrades:{...upgrades,survivorSession}},p_event:{status:'started',nonce:survivorSession.nonce}});
   }
-  const session = upgrades.survivorSession;
-  if (!session?.startedAt || session.nonce !== String(payload.nonce || '')) throw new Error('Survivor session is missing');
-  const elapsed = Math.max(1, Math.min(180, Math.floor((Date.now() - Number(session.startedAt)) / 1000)));
-  const seconds = Math.max(1, Math.min(elapsed + 3, Number(payload.seconds) || 1));
-  const wave = Math.max(1, Math.min(Math.floor(seconds / 12) + 1, Number(payload.wave) || 1));
-  const kills = Math.max(0, Math.min(wave * 14, Number(payload.kills) || 0));
-  const reward = Math.floor(seconds * 4 + kills * 8 + wave * 75);
-  const xpReward = Math.floor(seconds / 2 + wave * 12);
-  const old = upgrades.survivor && typeof upgrades.survivor === 'object' ? upgrades.survivor : {};
-  const nextUpgrades = { ...upgrades, survivor: { runs: (Number(old.runs) || 0) + 1, bestWave: Math.max(Number(old.bestWave) || 0, wave), bestTime: Math.max(Number(old.bestTime) || 0, seconds), totalKills: (Number(old.totalKills) || 0) + kills } };
+  const session=upgrades.survivorSession;
+  if(!session?.startedAt||session.nonce!==payload.nonce)throw new Error('Survivor session is missing');
+  for(const key of ['seconds','wave','kills'])if(!Number.isSafeInteger(payload[key])||payload[key]<0)throw new Error('Invalid Survivor score');
+  const elapsed=Math.max(0,Math.floor((Date.now()-session.startedAt)/1000));
+  if(elapsed>900)throw new Error('Survivor session expired');
+  if(payload.seconds>Math.min(183,elapsed+3)||payload.wave>Math.min(16,Math.floor(payload.seconds/12)+1)||payload.kills>Math.min(payload.wave*14,Math.ceil(payload.seconds/.32)+1))throw new Error('Impossible Survivor score');
+  const seconds=Math.min(180,elapsed,payload.seconds),wave=seconds<5?0:Math.max(1,payload.wave),kills=seconds<5?0:payload.kills;
+  const reward=seconds<5?0:Math.floor(seconds*4+kills*8+wave*75),xpReward=seconds<5?0:Math.floor(seconds/2+wave*12),old=upgrades.survivor||{};
+  const nextUpgrades={...upgrades,survivor:{runs:Number(old.runs||0)+1,bestWave:Math.max(Number(old.bestWave||0),wave),bestTime:Math.max(Number(old.bestTime||0),seconds),totalKills:Number(old.totalKills||0)+kills}};
   delete nextUpgrades.survivorSession;
-  const updated = await supabase('players', { method: 'PATCH', query: `?telegram_id=eq.${uid}&balance=eq.${Number(player.balance) || 0}&xp=eq.${Number(player.xp) || 0}`, body: { balance: Number(player.balance) + reward, xp: Number(player.xp) + xpReward, upgrades: nextUpgrades } });
-  if (!updated?.length) throw new Error('Profile changed, try again');
-  await rpc('apply_player_levels', { p_id: uid });
-  const snapshot = await rpc('player_snapshot', { p_id: uid });
-  snapshot.event = { status: 'finished', seconds, wave, kills, reward, xp: xpReward };
-  return snapshot;
+  return rpc('commit_player_reward',{p_id:uid,p_expected:{balance:player.balance,xp:player.xp,upgrades:player.upgrades},p_changes:{balance:Number(player.balance)+reward,xp:Number(player.xp)+xpReward,upgrades:nextUpgrades},p_event:{status:'finished',seconds,wave,kills,reward,xp:xpReward}});
 }
 
 async function upgradeItem(user, payload) {
@@ -1086,17 +1044,15 @@ async function claimAchievement(user, payload) {
   const player = players?.[0];
   if (!player || achievementProgress(definition, player, inventory) < definition.target) throw new Error('Достижение ещё не выполнено');
   const missionId = `achievement_${id}`;
-  await supabase('mission_claims', { method: 'POST', body: { player_id: uid, period: 'once', mission_id: missionId } });
-  const upgrades = player.upgrades && typeof player.upgrades === 'object' ? player.upgrades : {}, oldTitles = upgrades.titles && typeof upgrades.titles === 'object' ? upgrades.titles : {};
+  const upgrades = player.upgrades || {}, oldTitles = upgrades.titles || {};
   const owned = [...new Set([...(Array.isArray(oldTitles.owned) ? oldTitles.owned : []), definition.title])];
-  try {
-    const updated = await supabase('players', { method: 'PATCH', query: `?telegram_id=eq.${uid}&balance=eq.${Number(player.balance)}&crystals=eq.${Number(player.crystals) || 0}`, body: { balance: Number(player.balance) + definition.coins, crystals: (Number(player.crystals) || 0) + definition.crystals, xp: (Number(player.xp) || 0) + 50, upgrades: { ...upgrades, titles: { owned, active: oldTitles.active || definition.title } } } });
-    if (!updated?.length) throw new Error('Профиль изменился, повтори получение');
-  } catch (error) { await supabase('mission_claims', { method: 'DELETE', query: `?player_id=eq.${uid}&period=eq.once&mission_id=eq.${encodeURIComponent(missionId)}` }).catch(() => {}); throw error; }
-  await rpc('apply_player_levels', { p_id: uid });
-  const snapshot = await rpc('player_snapshot', { p_id: uid });
-  snapshot.event = { status: 'achievement_claimed', achievement: id, coins: definition.coins, crystals: definition.crystals, title: definition.title };
-  return attachRoadmap(snapshot, user);
+  const snapshot = await rpc('commit_player_reward', {
+    p_id: uid, p_expected: {balance:player.balance,crystals:player.crystals,xp:player.xp,upgrades:player.upgrades},
+    p_changes: {balance:Number(player.balance)+definition.coins,crystals:Number(player.crystals||0)+definition.crystals,xp:Number(player.xp||0)+50,upgrades:{...upgrades,titles:{owned,active:oldTitles.active||definition.title}}},
+    p_claim: missionId,
+    p_event: {status:'achievement_claimed',achievement:id,coins:definition.coins,crystals:definition.crystals,title:definition.title}
+  });
+  return attachRoadmap(snapshot,user);
 }
 
 async function setProfileTitle(user, payload) {

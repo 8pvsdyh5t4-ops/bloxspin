@@ -18,21 +18,23 @@ Working branch: `feat/roadmap-42-50`.
 ## Verification
 
 - `node scripts/build.cjs`: syntax and asset checks, static output.
-- `node --test tests/*.test.cjs`: 12 tests covering Telegram validation, promo input, cached/concurrent requests, bans, server PvE and Tower reward behavior.
+- `node --test tests/*.test.cjs`: 15 tests covering Telegram validation, promo input, cached/concurrent requests, bans, server PvE and Tower reward behavior.
 - Browser checks with Edge/Playwright: local PvE attack, persisted sound toggle, six ranking tabs and authenticated admin using fixtures; 320/390/768px widths; no JavaScript page errors.
 - Live Supabase rollback tests: combined promo reward including cosmetics, duplicate redemption refusal, Crystal grant, equipment snapshot, request replay/serialization and expired-lease behavior. Test rows rolled back.
 - Supabase security advisor returned INFO notices for server-only tables with RLS and no client policies; no warning/error findings in the inspected result. This is intentional for service-role-only access. Reference: https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy
 
 ## Applied to Supabase
 
-The four dated migrations from `20261003203159` through `20261003204143` are already applied to project `iygorpzocptfwtctvzvp`. Do not manually rerun them against production; use migration history.
+The six dated migrations from `20261003203159` through `20261004053903` are already applied to project `iygorpzocptfwtctvzvp`. Do not manually rerun them against production; use migration history.
 
-## Release blocked / remaining verification
+## Release status and verification limits
 
-GitHub connector returned 403 `Resource not accessible by integration` for branch creation. Vercel's advertised deployment tool returned `Tool deploy_to_vercel not found`. No new commit has been published or deployed. Production remains at the base commit above; its inspected runtime logs showed no errors.
+Standard authenticated Git successfully published the branch. PR #1 is open. The first Vercel preview (64edb3b) built successfully and its UI and unsigned API rejection were checked on the real deployment. Production variables are scoped to production, so authenticated preview gameplay is not claimed as verified.
 
-After write access is restored: push this branch, create a reviewable PR, inspect the Vercel preview build, exercise real signed Telegram player and owner sessions, verify online two-player PvP and Survivor, then promote/merge and inspect production runtime errors. A fixture browser test is not a real Telegram end-to-end test.
+Battle rewards, achievements, Survivor completion and online PvP results now commit their related player changes atomically. Online PvP records the match result and both player rewards in the same transaction. Live rollback tests verify duplicate final turns cannot repeat payouts.
 
-The request guard prevents duplicate execution for the same request ID; it does not make legacy multi-call REST operations one database transaction. A process failure can leave a partial operation, returned as uncertain, and requires state reconciliation. Survivor still uses server time/nonce and bounded client reports rather than a fully server-simulated run. These limits must not be described as comprehensive anti-cheat.
+Survivor rejects impossible/fractional reports, wrong/expired nonces and instant-exit reward farming. It still uses bounded client progress rather than a fully server-simulated run; this is not a claim of cheat-proof gameplay.
+
+The request guard prevents duplicate execution for the same request ID. Some legacy multi-call REST operations outside the migrated reward paths remain non-transactional; an interrupted operation is marked uncertain and must be reconciled against server state. Real Telegram device sessions and two-player network behavior still require live acceptance testing.
 
 Configure `OWNER_TELEGRAM_IDS` for stable production owner authorization; existing username fallback remains for compatibility when the variable is absent.
