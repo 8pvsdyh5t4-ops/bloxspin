@@ -48,3 +48,17 @@ body[data-page="profile"] .header{padding-bottom:3px}
 @keyframes hero-pulse{50%{transform:translate(-50%,-50%) scale(1.05);opacity:.75}}
 @media(max-width:370px){.hero-stage{height:440px}.hero-character{height:365px;max-width:82%}.hero-aura{width:230px;height:230px}.hero-slot{width:62px;min-height:73px;padding:4px 2px}.hero-slot-icon{width:33px;height:33px}.hero-slot-icon .icon{width:22px;height:22px}.hero-slot strong{font-size:8px}.hero-slot small{font-size:6px}.hero-equipped-card{width:185px;bottom:12px}.hero-slot-column{bottom:82px}.hero-title{padding-left:13px;padding-right:13px}.hero-loadout,.hero-equipment-summary,.hero-stats{margin-left:8px;margin-right:8px}.hero-stat{gap:7px;padding:8px}.hero-stat-icon{width:29px;height:29px;flex-basis:29px}.hero-stat-icon .icon{width:18px;height:18px}.hero-stat strong{font-size:13px}.hero-stat small{font-size:6px}}
 @media(prefers-reduced-motion:reduce){.hero-aura{animation:none}}
+/* Hero composition: six independent slots flanking the character. */
+.hero-title{padding-top:5px}.hero-title h2{font-size:21px}.hero-title>div>span{display:none}
+.hero-stage{height:365px;border-radius:14px;background:radial-gradient(ellipse at 50% 45%,#48258788,transparent 60%),linear-gradient(#15113777,#090c2188),url('/assets/cyber-world.webp') center/cover}
+.hero-character{height:330px;width:290px;max-width:88%;top:0}
+.hero-slot-column{top:18px;bottom:56px}.hero-slot{width:64px;min-height:80px;border-radius:9px}
+.hero-slot-icon{width:44px;height:44px;background:#101026}.hero-slot-icon .item-art{border-radius:5px}
+.hero-slot strong{font-size:9px}.hero-slot small{font-size:8px}.hero-slot.equipped{box-shadow:0 0 10px #c179fa38}
+.hero-equipped-card{display:none}.hero-power-card{position:relative;z-index:5;width:170px;min-height:50px;margin:-52px auto 12px;border:2px solid #d25aff;background:linear-gradient(135deg,#291445,#100b28);box-shadow:0 0 18px #a621ff80;justify-content:center;gap:7px}
+.hero-power-card>span:last-child{display:none}.hero-power-card strong{font-size:23px}.hero-actions button{height:43px;font-size:12px}
+.hero-stats-head{margin-top:17px}.hero-stat{min-height:56px;border-radius:9px}.hero-stat small{font-size:9px}.hero-stat strong{font-size:16px}
+.hero-equipment-summary .item-art{width:35px;height:35px}.hero-equipment-summary small{font-size:9px}
+@media(max-width:370px){.hero-stage{height:330px}.hero-character{height:298px}.hero-slot{width:57px;min-height:72px}.hero-slot-icon{width:35px;height:35px}.hero-slot strong,.hero-slot small{font-size:8px}.hero-slot-column{bottom:57px}}
+/* Keep badge graphics vivid even in compact slots. */
+.hero-slot.owned .hero-slot-icon,.hero-slot.equipped .hero-slot-icon{filter:none;background:#101026}

@@ -1,5 +1,17 @@
 /* Roadmap 1–2: loading screen and home presentation only. */
 body.booting{overflow:hidden}
+/* Shared visual language of the approved six-screen reference. */
+body{background:#060714;color:#f6f0ff}
+.app{max-width:440px!important;background:radial-gradient(ellipse at 50% 0,#27174b55,transparent 55%),#090b1d;min-height:100vh}
+.nav{max-width:440px!important;background:linear-gradient(#15152bee,#0b0c20f5);border:1px solid #57407b66;border-radius:20px 20px 0 0;box-shadow:0 -10px 32px #05051488;backdrop-filter:blur(18px)}
+body:not(.is-home) .header{padding:10px 16px 5px;min-height:45px}
+body:not(.is-home) .header .brand-mark{width:26px;height:26px;border-radius:8px}
+body:not(.is-home) .header .logo{font-size:16px}
+body:not(.is-home) .header .sub,body:not(.is-home) .header .version-chip{display:none}
+.item-art{display:inline-block;width:100%;height:100%;aspect-ratio:1;background-image:url('/assets/item-atlas.webp');background-size:300% 300%;background-repeat:no-repeat;border-radius:7px;vertical-align:middle;flex-shrink:0}
+.art-sword{background-position:0 0}.art-block{background-position:50% 0}.art-crown{background-position:100% 0}.art-pet{background-position:0 50%}.art-crystal{background-position:50% 50%}.art-secret{background-position:100% 50%}.art-eclipse_blade{background-position:0 100%}.art-nova_pet{background-position:50% 100%}.art-void_relic{background-position:100% 100%}
+button,summary{-webkit-tap-highlight-color:transparent}
+@media(min-width:600px){.app{border-left:1px solid #7044a438;border-right:1px solid #7044a438;box-shadow:0 0 100px #5c21b018}body{background:radial-gradient(ellipse at 50% 20%,#221042,#060714 65%)}}
 .booting .app,.booting .nav{visibility:hidden}
 [hidden]{display:none!important}
 .loading-screen{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;background:#080a20;opacity:1;transition:opacity .45s ease;overflow:hidden}
@@ -56,3 +68,10 @@ button:focus-visible,summary:focus-visible{outline:2px solid #83ddff;outline-off
 .nav button.active:before{background:#9a65ff;box-shadow:0 0 10px #a46dff}.nav button.active .icon{transform:translateY(-1px);filter:drop-shadow(0 0 6px #a45dff)}
 .nav button:focus-visible{outline:2px solid #67dcff;outline-offset:-2px}.app{padding-bottom:calc(94px + env(safe-area-inset-bottom))}
 @media(min-width:521px){.nav{bottom:12px;width:calc(100% - 24px);border-width:1px;border-radius:22px;padding-bottom:7px;height:70px}.app{padding-bottom:112px}}
+/* Reference composition: compact player card, season art, daily gift, three entrances. */
+.is-home .header{height:118px}
+.is-home .player{margin-top:-5px;position:relative;border-color:#7951b955;background:linear-gradient(125deg,#19162f,#0d1025)}
+.season-banner{height:170px;border-color:#ad52ef;border-radius:12px;box-shadow:0 0 18px #9026ff25}
+.home-actions{gap:7px}.home-action{border-radius:10px;min-height:94px}
+.home-action .icon{width:39px;height:39px}.home-more>summary{font-size:11px}
+@media(max-width:370px){.is-home .header{height:100px}.season-banner{height:145px}.home-action{min-height:84px}}

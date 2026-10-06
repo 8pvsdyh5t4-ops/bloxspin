@@ -11,3 +11,22 @@ body[data-page="spin"] .header{padding-bottom:3px}
 @keyframes machine-shine{0%,55%{transform:translateX(-100%)}75%,100%{transform:translateX(100%)}}
 @media(max-width:370px){.spin-page-title{padding-left:13px;padding-right:13px}#page-spin .slot,.spin-rewards,#page-spin .drop-note,#page-spin .rescue{margin-left:8px;margin-right:8px}.spin-machine{height:275px}.spin-machine .reels{left:9px;right:9px;top:105px}.spin-machine .reel{height:96px}.spin-machine .reel .slot-symbol{width:48px;height:48px}.machine-light-row{bottom:10px}.spin-reward{padding-left:1px;padding-right:1px}.spin-reward>span{width:29px;height:29px}.spin-reward .icon{width:21px;height:21px}}
 @media(prefers-reduced-motion:reduce){.spin-machine:before{animation:none}}
+/* Crown machine artwork with three live result windows and an ornamental reward row. */
+#page-spin .slot{padding:0 10px 11px;border-radius:15px;overflow:hidden}
+.spin-page-title{padding-top:5px}.spin-page-title h2{font-size:20px}.spin-page-title>div>span{display:none}
+.spin-machine{height:auto;aspect-ratio:1;margin:0 -10px;border:0;border-radius:0;background:#180940 url('/assets/spin-machine.webp') center/cover;box-shadow:none}
+.machine-crown,.machine-gem,.machine-label,.machine-light-row{display:none}
+.spin-machine .reels{left:26%;right:23%;top:33%;height:16%;padding:0;gap:3%;border:0;border-radius:0;background:none;box-shadow:none}
+.spin-machine .reel{height:100%;min-width:0;padding:5%;border:0;border-radius:8px;background:none;box-shadow:none;overflow:hidden}
+.spin-machine .reel .item-art{width:100%;height:auto;border-radius:8px;box-shadow:0 0 9px #df65ff80}
+.spin-machine .reel .slot-symbol{width:70%;height:70%;color:#d595ff}
+.machine-preview{position:absolute;left:25%;right:23%;top:52%;height:17%;display:flex;align-items:center;justify-content:space-around;gap:5%;padding:0 2%}
+.machine-preview .item-art{width:29%;height:auto;opacity:.9}
+#page-spin .result{min-height:22px;margin:5px 0;font-size:10px}
+#page-spin .bet{font-size:11px}#page-spin .spin{height:50px;background:linear-gradient(#d72cff,#8b0ef0);border:1px solid #f29cff;box-shadow:inset 0 1px #ffd9ff,0 0 18px #ad26ee65}
+#page-spin .auto-btn{height:30px;font-size:10px;background:transparent}
+.spin-rewards{display:flex;overflow-x:auto;padding-bottom:8px;scrollbar-width:thin;scrollbar-color:#56317a transparent}
+.spin-reward{flex:0 0 calc((100% - 25px)/6);min-height:88px;border-radius:8px;padding:4px 2px}
+.spin-reward>span{width:100%;height:auto;aspect-ratio:1;background:none}.spin-reward .item-art{height:auto}
+.spin-reward strong{font-size:7px}.spin-reward b{font-size:10px}.spin-reward small{font-size:7px}
+.spin-machine{aspect-ratio:1.16;background-size:100% 100%}
