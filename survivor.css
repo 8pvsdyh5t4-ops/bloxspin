@@ -2,3 +2,7 @@ body[data-page="survivor"] .app>.player{display:none}body[data-page="survivor"] 
 @media(max-width:360px){.survivor-arena{height:52vh}.survivor-footer{grid-template-columns:45px 1fr 58px}.survivor-pad{grid-template-columns:repeat(3,32px)}}
 
 .survivor-skill-list{display:flex;flex-wrap:wrap;justify-content:center;gap:5px;margin-top:12px}.survivor-skill-list span{padding:5px 7px;border:1px solid #50dfff2f;border-radius:99px;color:#91dff4;background:#0b1725;font-size:6px;font-weight:800}
+
+/* Survivor uses the same illustrated hero and enemies instead of empty glyphs. */
+.survivor-hero-preview{overflow:hidden;border-radius:24px;background:#091329}.survivor-hero-preview:before{content:"";position:absolute;inset:0;background:url('/assets/battle-atlas.webp') 0 0/300% 300% no-repeat}.survivor-hero-preview .icon{display:none}.survivor-hero-preview i{z-index:2}
+.survivor-player{width:52px;height:52px;border-radius:12px;background:#10152a url('/assets/hero-loadout.webp') center 42%/82px auto no-repeat}.survivor-player .icon{display:none}.survivor-enemy{width:34px;height:34px;border-radius:8px;background:#261225 url('/assets/battle-atlas.webp') 100% 0/300% 300% no-repeat}.survivor-enemy .icon{display:none}.survivor-enemy.elite{width:43px;height:43px;background-position:100% 50%}
