@@ -1,0 +1,45 @@
+/* Illustrated atlas for avatars, PvP rivals and community screens. */
+.world-art{display:block;background-image:url('/assets/world-atlas.webp');background-repeat:no-repeat;background-size:300% 300%;background-color:#11152a}
+.world-hero{background-position:0 0}.world-rival-red{background-position:50% 0}.world-rival-blue{background-position:100% 0}
+.world-shop{background-position:0 50%}.world-market{background-position:50% 50%}.world-clan{background-position:100% 50%}
+.world-trophy{background-position:0 100%}.world-locked{background-position:50% 100%}.world-achievement{background-position:100% 100%}
+
+#avatar,.inventory-portrait,.big-avatar{background-image:url('/assets/world-atlas.webp')!important;background-size:300% 300%!important;background-position:0 0!important;background-repeat:no-repeat!important}
+#avatar .icon,.big-avatar .icon{display:none}
+
+.profile-showcase{position:relative;overflow:hidden}
+.profile-showcase-art{position:absolute;right:-9px;top:-6px;width:116px;height:145px;border-left:1px solid #9b68ff33;filter:saturate(1.08);mask-image:linear-gradient(to bottom,#000 72%,transparent)}
+.profile-showcase-head,.profile-showcase select,.profile-showcase-grid,.profile-achievement-progress{position:relative;z-index:1}
+.profile-showcase-head{padding-right:90px}
+.profile-showcase-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+
+.community-cover{position:relative;display:flex;align-items:flex-end;min-height:148px;margin:0 18px 12px;padding:16px;overflow:hidden;border:1px solid #9b69ff55;border-radius:20px;background:#101526;box-shadow:0 16px 36px #0005}
+.community-cover>.world-art{position:absolute;inset:0;width:100%;height:100%;background-size:300% 300%;background-position:50% 50%}
+.community-cover:after{content:'';position:absolute;inset:0;background:linear-gradient(0deg,#090d19 0,#090d19bb 22%,transparent 72%)}
+.community-cover>div{position:relative;z-index:1}.community-cover small,.community-cover strong{display:block}.community-cover small{color:#70e4ff;font-size:7px;font-weight:950;letter-spacing:.15em}.community-cover strong{margin-top:4px;font-size:16px}
+
+.clan-create-card{position:relative;min-height:282px;padding-top:135px;overflow:hidden}
+.clan-create-art{position:absolute;left:0;right:0;top:0;width:100%;height:124px;background-position:100% 50%;border-bottom:1px solid #9672ff55}
+.clan-create-card:after{content:'';position:absolute;left:0;right:0;top:70px;height:56px;background:linear-gradient(transparent,#161d32);pointer-events:none}
+.clan-create-card>*:not(.clan-create-art){position:relative;z-index:1}
+.clan-browser .community-empty:before,.market-list .community-empty:before{content:'';display:block;width:94px;height:94px;margin:0 auto 10px;border-radius:18px;background-image:url('/assets/world-atlas.webp');background-size:300% 300%;box-shadow:0 10px 24px #0005}
+.clan-browser .community-empty:before{background-position:100% 50%}.market-list .community-empty:before{background-position:50% 50%}
+
+.market-item-icon{overflow:hidden;padding:0}.market-item-icon .item-art{width:100%;height:100%;border-radius:12px}
+.shop-icon{overflow:hidden;padding:0}.shop-icon .item-art,.shop-icon .world-art{width:100%;height:100%;border-radius:13px}
+.star-icon{overflow:hidden;padding:0}.star-icon .item-art{width:100%;height:100%;border-radius:11px}
+.shop-hero{position:relative;overflow:hidden;padding-right:118px}.shop-hero-art{position:absolute;right:0;top:0;width:112px;height:100%;border-left:1px solid #ffd56b35;mask-image:linear-gradient(90deg,transparent,#000 22%)}
+.clan-entry-icon.world-art{background-size:300% 300%;background-position:100% 50%;box-shadow:0 0 17px #7658ff66}
+
+.pvp-target-avatar{overflow:hidden;background-size:300% 300%;box-shadow:0 0 14px #6e6bff55}
+.pvp-avatar.world-art{display:block;background-size:300% 300%;background-color:#15162a}
+.pvp-targets-empty:before{content:'';display:block;width:98px;height:68px;margin:0 auto 9px;border-radius:15px;background:url('/assets/world-atlas.webp') 100% 0/300% 300%;box-shadow:0 8px 22px #0005}
+.pvp-banner-art{flex:0 0 82px;width:82px;height:82px;border-radius:18px;background-size:300% 300%;box-shadow:0 0 22px #ffcf5a38}
+
+.achievement-icon{overflow:hidden;padding:0}.achievement-icon .world-art{width:100%;height:100%;border-radius:12px}
+.ranking-empty .world-art{width:128px;height:104px;margin:0 auto 12px;border-radius:18px;background-size:300% 300%;box-shadow:0 12px 28px #0005}
+.rank-summary{position:relative;overflow:hidden;min-height:80px;padding-right:94px}
+.rank-summary:after{content:'';position:absolute;right:8px;top:5px;width:82px;height:72px;border-radius:15px;background:url('/assets/world-atlas.webp') 0 100%/300% 300%;box-shadow:0 8px 24px #0005}
+.limited-item>span{overflow:hidden;padding:0}.limited-item>span .item-art,.limited-item>span .world-art{width:100%;height:100%;border-radius:9px}
+
+@media(max-width:360px){.profile-showcase-head{padding-right:72px}.profile-showcase-art{width:94px;height:128px}.community-cover{margin-left:12px;margin-right:12px}.clan-create-card{padding-top:125px}}
