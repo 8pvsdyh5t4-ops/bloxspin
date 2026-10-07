@@ -76,3 +76,14 @@ body[data-page="profile"] .header{padding-bottom:3px}
 @keyframes gear-aura-spin{to{transform:translateX(-50%) rotate(360deg)}}@keyframes gear-skin-pulse{50%{opacity:.72;filter:drop-shadow(0 0 20px #d94dff)}}
 @media(max-width:370px){.hero-gear-crown{width:88px;height:70px}.hero-gear-weapon{left:64%;top:100px;width:120px;height:160px}.hero-gear-armor{top:83px;width:132px;height:135px}.hero-gear-pet{left:66%;top:54px;width:75px;height:75px}.hero-gear-aura{top:38px;width:248px;height:248px}.hero-gear-skin{top:18px;width:220px;height:290px}}
 @media(prefers-reduced-motion:reduce){.hero-gear-aura,.hero-gear-skin{animation:none}}
+
+/* Body-anchored equipment. A complete six-slot build uses one seamless render. */
+.hero-complete-character{position:absolute;z-index:2;left:50%;top:-2px;display:none;width:292px;max-width:88%;height:342px;object-fit:contain;transform:translateX(-50%);filter:drop-shadow(0 14px 24px #02030b) drop-shadow(0 0 16px #b537ff88)}
+.hero-loadout[data-complete="true"] .hero-character,.hero-loadout[data-complete="true"] .hero-gear{display:none!important}.hero-loadout[data-complete="true"] .hero-complete-character{display:block}
+.hero-gear-crown{left:50%;top:0;width:23%;height:21%;transform:translateX(-50%)}
+.hero-gear-armor{left:50%;top:25%;width:43%;height:43%;transform:translateX(-50%)}
+.hero-gear-weapon{left:62%;top:29%;width:39%;height:54%;transform:rotate(9deg)}
+.hero-gear-pet{left:68%;top:14%;width:25%;height:25%}
+.hero-gear-aura{left:50%;top:7%;width:78%;height:auto;aspect-ratio:1;transform:translateX(-50%)}
+.hero-gear-skin{z-index:0;left:50%;top:4%;width:70%;height:86%;transform:translateX(-50%);opacity:.2;filter:blur(1px) drop-shadow(0 0 20px #d94dff);mix-blend-mode:screen}
+@media(max-width:370px){.hero-complete-character{width:265px;height:310px}.hero-gear-crown{width:22%;height:20%}.hero-gear-weapon{left:61%;top:29%;width:38%;height:53%}.hero-gear-armor{top:25%;width:42%;height:42%}.hero-gear-pet{left:67%;top:14%;width:24%;height:24%}.hero-gear-aura{top:7%;width:76%}.hero-gear-skin{top:5%;width:68%;height:84%}}
