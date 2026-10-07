@@ -13,3 +13,6 @@
 .pvp-online-head strong{font-size:12px}.pvp-online>p{font-size:10px;line-height:1.5;color:#b0a2c6}
 .arena-offline{margin:10px 12px;border:1px solid #8053a56b;border-radius:10px;background:#151329}.arena-offline>summary{padding:13px 11px;cursor:pointer;color:#d5b6f4;font-size:11px;font-weight:800}.arena-offline .pvp-banner{margin:0;border:0;min-height:0;padding:8px 12px;background:none;box-shadow:none}.arena-offline .pvp-banner h3{font-size:13px}.arena-offline .pvp-banner p{font-size:10px}.arena-offline .pvp-banner>.icon{display:none}
 .pvp-league-card{margin-top:10px;border-radius:11px}.pvp-league-card strong{font-size:19px}.pvp-league-card small,.pvp-league-card span{font-size:9px}.pvp-league-card button{font-size:9px}
+
+/* Live match identities stay visible beside their health bars. */
+.pvp-live-bars>span{position:relative;min-height:43px;padding-left:39px}.pvp-live-bars>span:last-child{padding-left:0;padding-right:39px}.pvp-live-bars>span:before{content:'';position:absolute;left:0;top:0;width:34px;height:34px;border:1px solid #63dcff66;border-radius:9px;background:#11152a url('/assets/world-atlas.webp') 0 0/300% 300% no-repeat;box-shadow:0 0 12px #32caff33}.pvp-live-bars>span:last-child:before{left:auto;right:0;border-color:#ff697d66;background-position:50% 0;box-shadow:0 0 12px #ff426033}

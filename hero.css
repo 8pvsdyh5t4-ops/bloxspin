@@ -63,3 +63,16 @@ body[data-page="profile"] .header{padding-bottom:3px}
 /* Keep badge graphics vivid even in compact slots. */
 .hero-slot.owned .hero-slot-icon,.hero-slot.equipped .hero-slot-icon{filter:none;background:#101026}
 .pet-center-icon{overflow:hidden;padding:2px}.pet-center-icon .item-art{width:100%;height:100%;border-radius:12px}.aura-orb{overflow:hidden;padding:2px}.aura-orb .item-art{width:100%;height:100%;border-radius:50%}.set-badge{overflow:hidden;padding:2px}.set-badge .item-art{width:100%;height:100%;border-radius:8px}
+
+/* Equipment is composited on the base hero from six independent slots. */
+.hero-gear{position:absolute;left:50%;z-index:2;display:none;pointer-events:none;background-position:center;background-repeat:no-repeat;background-size:contain;filter:drop-shadow(0 0 12px #a950ff88)}
+.hero-loadout[data-slots~="crown"] .hero-gear-crown,.hero-loadout[data-slots~="weapon"] .hero-gear-weapon,.hero-loadout[data-slots~="armor"] .hero-gear-armor,.hero-loadout[data-slots~="pet"] .hero-gear-pet,.hero-loadout[data-slots~="aura"] .hero-gear-aura,.hero-loadout[data-slots~="skin"] .hero-gear-skin{display:block}
+.hero-gear-crown{top:3px;width:104px;height:82px;transform:translateX(-50%);background-image:url('/assets/gear-crown.webp');z-index:4;filter:drop-shadow(0 0 10px #ffd34d)}
+.hero-gear-weapon{left:65%;top:112px;width:142px;height:185px;transform:rotate(12deg);background-image:url('/assets/gear-weapon.webp');z-index:4;filter:drop-shadow(0 0 11px #d33dff)}
+.hero-gear-armor{top:91px;width:152px;height:153px;transform:translateX(-50%);background-image:url('/assets/gear-armor.webp');z-index:3;filter:drop-shadow(0 0 9px #7d4fff)}
+.hero-gear-pet{left:67%;top:58px;width:88px;height:88px;background-image:url('/assets/gear-pet.webp');z-index:5;filter:drop-shadow(0 0 11px #4bdfff)}
+.hero-gear-aura{top:41px;width:285px;height:285px;transform:translateX(-50%);background-image:url('/assets/gear-aura.webp');z-index:0;opacity:.82;animation:gear-aura-spin 12s linear infinite}
+.hero-gear-skin{top:18px;width:250px;height:325px;transform:translateX(-50%);background-image:url('/assets/gear-skin.webp');z-index:0;opacity:.48;mix-blend-mode:screen;animation:gear-skin-pulse 2.8s ease-in-out infinite}
+@keyframes gear-aura-spin{to{transform:translateX(-50%) rotate(360deg)}}@keyframes gear-skin-pulse{50%{opacity:.72;filter:drop-shadow(0 0 20px #d94dff)}}
+@media(max-width:370px){.hero-gear-crown{width:88px;height:70px}.hero-gear-weapon{left:64%;top:100px;width:120px;height:160px}.hero-gear-armor{top:83px;width:132px;height:135px}.hero-gear-pet{left:66%;top:54px;width:75px;height:75px}.hero-gear-aura{top:38px;width:248px;height:248px}.hero-gear-skin{top:18px;width:220px;height:290px}}
+@media(prefers-reduced-motion:reduce){.hero-gear-aura,.hero-gear-skin{animation:none}}

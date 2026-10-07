@@ -37,3 +37,11 @@ body[data-page="spin"] .header{padding-bottom:3px}
 .spin-machine:has(.spinning):after{content:"";position:absolute;z-index:4;inset:28% 20% 27%;pointer-events:none;background:linear-gradient(180deg,transparent,#ffffff24 48%,transparent);mix-blend-mode:screen;animation:reel-scan .32s linear infinite}
 @keyframes reel-pulse{50%{transform:translateY(4%) scale(.94);opacity:.7}}@keyframes reel-scan{from{transform:translateY(-55%)}to{transform:translateY(55%)}}
 @media(prefers-reduced-motion:reduce){.spin-machine .spinning .item-art,.spin-machine:has(.spinning):after{animation:none}}
+
+
+/* Individual reel brakes and a clear final result pulse. */
+.spin-machine .settling{position:relative;z-index:5}.spin-machine .settling .item-art{animation:reel-land .3s cubic-bezier(.2,1.5,.4,1);filter:brightness(1.35) saturate(1.35);box-shadow:0 0 18px #f3b4ff}
+.spin-machine.spin-win{animation:machine-win .85s ease}.spin-machine.spin-win:after{content:"";position:absolute;z-index:6;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 48%,#fff59a99,transparent 38%);animation:win-burst .85s ease forwards}.spin-machine.spin-lose{animation:machine-settle .35s ease}
+.spin-machine.spin-win .machine-preview-cell,.spin-machine.spin-win .reel{filter:drop-shadow(0 0 9px #ffe46d)}
+@keyframes reel-land{0%{transform:translateY(-45%) scale(.75);opacity:.3}62%{transform:translateY(5%) scale(1.12);opacity:1}100%{transform:none;opacity:1}}@keyframes machine-win{35%{filter:brightness(1.35) saturate(1.4);transform:scale(1.012)}100%{filter:none;transform:none}}@keyframes win-burst{0%,100%{opacity:0}35%{opacity:1}}@keyframes machine-settle{45%{filter:brightness(.82)}100%{filter:none}}
+@media(prefers-reduced-motion:reduce){.spin-machine .settling .item-art,.spin-machine.spin-win,.spin-machine.spin-lose,.spin-machine.spin-win:after{animation:none}}

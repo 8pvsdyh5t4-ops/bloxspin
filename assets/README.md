@@ -11,6 +11,7 @@ Created with the built-in ImageGen tool using the user's approved six-screen Blo
 - `item-atlas.webp`: compact 3D inventory atlas containing the six base item families and three advanced drops.
 - `battle-atlas.webp`: nine-cell combat atlas containing the player hero, four standard PvE enemies, Inferno Golem, Cyber Dragon, Eclipse Lord and Tower Guardian. It supplies consistent full character art to battles, bosses, tower and Survivor.
 - `world-atlas.webp`: nine-cell world atlas for player avatars, PvP rivals, the shop, market, clans, rankings, locked collection states and achievements.
+- `hero-base.webp` and `gear-*.webp`: transparent base hero and six independently composited equipment layers.
 
 The loading screen waits for its decoded images, fonts, Telegram SDK readiness, the player bootstrap and the first rendered frame. Its five progress steps measure readiness, not downloaded bytes. Failed authenticated bootstraps show retry instead of opening a local account.
 
