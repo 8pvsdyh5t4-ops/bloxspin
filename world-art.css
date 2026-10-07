@@ -40,6 +40,8 @@
 .ranking-empty .world-art{width:128px;height:104px;margin:0 auto 12px;border-radius:18px;background-size:300% 300%;box-shadow:0 12px 28px #0005}
 .rank-summary{position:relative;overflow:hidden;min-height:80px;padding-right:94px}
 .rank-summary:after{content:'';position:absolute;right:8px;top:5px;width:82px;height:72px;border-radius:15px;background:url('/assets/world-atlas.webp') 0 100%/300% 300%;box-shadow:0 8px 24px #0005}
+.rank-avatar.world-art{display:block;background-size:300% 300%;background-color:#11152a;box-shadow:0 0 13px #7964ff42}
+#tournamentCard{position:relative;overflow:hidden;padding-right:92px;min-height:92px}#tournamentCard:after{content:'';position:absolute;right:10px;top:10px;width:70px;height:70px;border-radius:15px;background:url('/assets/world-atlas.webp') 0 100%/300% 300%;box-shadow:0 7px 20px #0005}#tournamentCard>.feature-head,#tournamentCard>.tournament-list{position:relative;z-index:1}
 .limited-item>span{overflow:hidden;padding:0}.limited-item>span .item-art,.limited-item>span .world-art{width:100%;height:100%;border-radius:9px}
 
 @media(max-width:360px){.profile-showcase-head{padding-right:72px}.profile-showcase-art{width:94px;height:128px}.community-cover{margin-left:12px;margin-right:12px}.clan-create-card{padding-top:125px}}

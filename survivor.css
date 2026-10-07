@@ -6,3 +6,5 @@ body[data-page="survivor"] .app>.player{display:none}body[data-page="survivor"] 
 /* Survivor uses the same illustrated hero and enemies instead of empty glyphs. */
 .survivor-hero-preview{overflow:hidden;border-radius:24px;background:#091329}.survivor-hero-preview:before{content:"";position:absolute;inset:0;background:url('/assets/battle-atlas.webp') 0 0/300% 300% no-repeat}.survivor-hero-preview .icon{display:none}.survivor-hero-preview i{z-index:2}
 .survivor-player{width:52px;height:52px;border-radius:12px;background:#10152a url('/assets/hero-loadout.webp') center 42%/82px auto no-repeat}.survivor-player .icon{display:none}.survivor-enemy{width:34px;height:34px;border-radius:8px;background:#261225 url('/assets/battle-atlas.webp') 100% 0/300% 300% no-repeat}.survivor-enemy .icon{display:none}.survivor-enemy.elite{width:43px;height:43px;background-position:100% 50%}
+
+.survivor-upgrade-modal button>.item-art{width:38px;height:38px;border-radius:9px;box-shadow:0 0 12px #5cbbff55}.survivor-result-art{width:86px;height:72px;margin:0 auto 8px;border-radius:16px;background-size:300% 300%;box-shadow:0 0 22px #ffcf5a42}
